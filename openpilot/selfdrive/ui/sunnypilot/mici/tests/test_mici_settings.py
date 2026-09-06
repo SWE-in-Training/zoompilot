@@ -661,6 +661,28 @@ class TestAcceleratorModelSelection:
     finally:
       ui_state.usb_connected, ui_state.usb_connected_ts, ui_state.usb_unknown, ui_state.chestnut_present = saved
 
+  def test_an_accelerator_recognised_after_the_grace_period_clears_unknown(self, params):
+    """The cable is seen from power-on but the Jetson configures the gadget
+    ~25 s after the UI starts, so the one-shot decision has already said
+    "unknown" by then. Presence arriving later must still clear it."""
+    from unittest import mock
+    from openpilot.selfdrive.ui import ui_state as module
+    from openpilot.selfdrive.ui.ui_state import ui_state
+    saved = ui_state.usb_connected, ui_state.usb_connected_ts, ui_state.usb_unknown, ui_state.chestnut_present
+    try:
+      ui_state.usb_connected, ui_state.usb_connected_ts = True, None
+      ui_state.usb_unknown, ui_state.chestnut_present = True, False
+      with mock.patch.object(module, 'read_int', return_value=1), \
+           mock.patch.object(module, 'get_usb_state', return_value=[]) as scan:
+        ui_state.update_params()
+        assert ui_state.usb_unknown is True
+        ui_state.chestnut_present = True
+        ui_state.update_params()
+        assert ui_state.usb_unknown is False
+        scan.assert_not_called()
+    finally:
+      ui_state.usb_connected, ui_state.usb_connected_ts, ui_state.usb_unknown, ui_state.chestnut_present = saved
+
 
 class TestAcceleratorLinkToggle:
   """The models panel's auto / on / off control over the accelerator link.
