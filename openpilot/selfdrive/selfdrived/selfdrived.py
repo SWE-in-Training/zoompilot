@@ -453,11 +453,15 @@ class SelfdriveD(CruiseHelper):
       self.logged_comm_issue = None
 
     if not self.CP.notCar and not big_model_settling:  # localization has nothing to work with during the load
-      if not self.sm['deviceMotion'].posenetOK:
-        self.events.add(EventName.posenetInvalid)
-      if not self.sm['deviceMotion'].inputsOK:
-        self.events.add(EventName.locationdTemporaryError)
-      if (not self.sm['vehicleParameters'].valid and cal_status == log.ExtrinsicsCalibration.Status.calibrated and
+      # a message never received is capnp defaults, not a localizer verdict: locationd and paramsd
+      # publish nothing while modeld is down, and processNotRunning already says so
+      if self.sm.recv_frame['deviceMotion'] > 0:
+        if not self.sm['deviceMotion'].posenetOK:
+          self.events.add(EventName.posenetInvalid)
+        if not self.sm['deviceMotion'].inputsOK:
+          self.events.add(EventName.locationdTemporaryError)
+      if (self.sm.recv_frame['vehicleParameters'] > 0 and not self.sm['vehicleParameters'].valid and
+          cal_status == log.ExtrinsicsCalibration.Status.calibrated and
           not TESTING_CLOSET and (not SIMULATION or REPLAY)):
         self.events.add(EventName.paramsdTemporaryError)
 
