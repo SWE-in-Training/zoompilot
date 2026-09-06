@@ -180,8 +180,9 @@ class ModelState(ModelStateBase):
 
   def __init__(self, cam_w: int, cam_h: int, chestnut: bool):
     ModelStateBase.__init__(self)
-    jits = load_oob(open_file_chunked(modeld_pkl_path(chestnut)))
-    check_modeld_pkl(jits, modeld_pkl_path(chestnut))
+    pkl_path = modeld_pkl_path(chestnut)
+    jits = load_oob(open_file_chunked(pkl_path))
+    check_modeld_pkl(jits, pkl_path)
     input_devices = jits['input_devices']
     self.model_device = input_devices['model']
     metadata = jits['metadata']

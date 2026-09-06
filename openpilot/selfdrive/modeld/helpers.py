@@ -47,8 +47,8 @@ def load_oob(f):
       yield pb
   return pickle.load(io.BytesIO(opcodes), buffers=buffers())
 
-# what compile_modeld.py writes and modeld reads. a pkl from another compile_modeld.py unpickles
-# fine and only fails on the first key it lacks, deep in ModelState, as a bare KeyError
+# the top level of the pkl compile_modeld.py writes. checked at both ends: a pkl from another
+# compile_modeld.py unpickles fine and only fails on the first key it lacks, as a bare KeyError
 MODELD_PKL_KEYS = ('metadata', 'input_devices', 'run_model')
 
 def check_modeld_pkl(jits: dict, path) -> None:
