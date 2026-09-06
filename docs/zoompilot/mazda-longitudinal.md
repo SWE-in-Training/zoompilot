@@ -192,6 +192,16 @@ until the brake was released 4 s later (route 7f9e3ff336 t+484 to 488). The PEDA
 a few frames behind the button, so `CANCEL_CONTEXT_T` (0.5 s) lets availability drops land for
 that long after a CAN_OFF press.
 
+The panda carries the same context (`MAZDA_CANCEL_CONTEXT_FRAMES`, 25 frames of the 50 Hz PEDALS
+clock). Before it did, `acc_main_on` only fell on a brake-free sample, so main toggled at a red
+light with the brake held never fell on the panda: the software's availability dropped through
+its cancel context and MADS disabled, the panda kept lateral until the heartbeat mismatch
+dropped it 3 s later, and the next main press found `acc_main_on` already high. No rising edge,
+no lateral request, and MADS steered into 200 rejected frames: "Controls Mismatch: Lateral"
+(route 000001c9--0b2a64a214 seg 0, three times in 15 s, remain-active mode). The two machines
+now derive main from identical rules: follow arming, hold a both-low sample under braking, let
+it fall on a brake-free sample or inside the cancel context.
+
 ### Panda engagement qualifier
 
 The panda arms `controls_allowed` only on an ACC_ACTIVE rising edge backed by a recent RES, SET_P
@@ -620,6 +630,7 @@ the dash lane indicators, so those two stay zeroed.
 | `RADAR_SESSION_LIMIT_T` | 10.0 s | per-episode UDS budget | design |
 | `MAZDA_ENGAGE_BTN_WINDOW` | 10 CRZ_BTNS frames | press 30 to 70 ms before ACC_ACTIVE, 104 engagements | corpus |
 | `CANCEL_CONTEXT_T` | 0.5 s | PEDALS lags the CAN_OFF press by a few frames | 7f9e3ff336 |
+| `MAZDA_CANCEL_CONTEXT_FRAMES` | 25 PEDALS frames | `CANCEL_CONTEXT_T` on the 50 Hz PEDALS clock | derived |
 | `RESUME_UNLATCH_LATCHED_T` | 0.18 s (9 wire frames) | latched pulses 6 to 11 wire frames, mode 9 | 33-pulse census |
 | `RESUME_REPULSE_T` | 1.0 s | body answered all 10 pulses in 30 to 51 ms | 103, 115, 118, 11d, 12c, 132, 139, fe |
 | `RELEASE_DEBOUNCE_T` | 0.2 s | lead opening >= +0.31 m/s at all 23 stock latched pulses | corpus |
