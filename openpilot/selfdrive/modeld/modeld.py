@@ -27,7 +27,7 @@ from openpilot.selfdrive.modeld.compile_modeld import make_input_queues, nv12_co
 from openpilot.selfdrive.modeld.fill_model_msg import fill_model_msg, fill_driving_model_data, fill_pose_msg, PublishState
 from openpilot.common.file_chunker import open_file_chunked
 from openpilot.selfdrive.modeld.constants import ModelConstants, Plan
-from openpilot.selfdrive.modeld.helpers import modeld_pkl_path, load_oob
+from openpilot.selfdrive.modeld.helpers import modeld_pkl_path, load_oob, check_modeld_pkl
 
 from openpilot.sunnypilot import accelerators
 from openpilot.sunnypilot.livedelay.helpers import get_lat_delay
@@ -85,7 +85,9 @@ class ModelState(ModelStateBase):
 
   def __init__(self, cam_w: int, cam_h: int, chestnut: bool):
     ModelStateBase.__init__(self)
-    jits = load_oob(open_file_chunked(modeld_pkl_path(chestnut)))
+    pkl_path = modeld_pkl_path(chestnut)
+    jits = load_oob(open_file_chunked(pkl_path))
+    check_modeld_pkl(jits, pkl_path)
     input_devices = jits['input_devices']
     self.model_device = input_devices['model']
     metadata = jits['metadata']

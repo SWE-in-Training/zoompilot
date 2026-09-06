@@ -17,6 +17,7 @@ from openpilot.common.hardware.hw import Paths
 from openpilot.sunnypilot import accelerators
 
 from openpilot.cereal import messaging, custom
+from openpilot.sunnypilot.models.default_bootstrap import maybe_apply_default_model
 from openpilot.sunnypilot.models.fetcher import ModelFetcher
 from openpilot.sunnypilot.models.helpers import (ACTIVE_BUNDLE_KEYS, get_active_bundle, get_selected_bundle,
                                                   resolve_bundle_by_ref, validate_active_bundles, verify_file)
@@ -328,6 +329,11 @@ class ModelManagerSP:
         self.available_models = self.source_models[ModelFetcher.active_source(self.chestnut_catalog)]
         validate_active_bundles(self.params, self.source_models)
         self.active_bundle = get_active_bundle(self.params, chestnut=self.chestnut_catalog)
+        # An accelerator with its own model registry runs in stock modeld, and an empty
+        # qcom slot is what keeps manager there (see below). Seeding the default model
+        # into that slot would move it to modeld_tinygrad and silently drop the link.
+        if not accelerators.uses_stock_runner():
+          maybe_apply_default_model(self.params, self.source_models["qcom"])
 
         # Only a chestnut device needs a qcom model sitting behind its chestnut one,
         # because that slot is what modeld falls back to when the board is not
