@@ -47,6 +47,15 @@ def load_oob(f):
       yield pb
   return pickle.load(io.BytesIO(opcodes), buffers=buffers())
 
+# what compile_modeld.py writes and modeld reads. a pkl from another compile_modeld.py unpickles
+# fine and only fails on the first key it lacks, deep in ModelState, as a bare KeyError
+MODELD_PKL_KEYS = ('metadata', 'input_devices', 'run_model')
+
+def check_modeld_pkl(jits: dict, path) -> None:
+  missing = [k for k in MODELD_PKL_KEYS if k not in jits]
+  if missing:
+    raise RuntimeError(f"{path} is missing {missing}: it was compiled by a different compile_modeld.py than this modeld, rebuild it")
+
 def chestnut_present() -> bool:
   for d in USB_DEVICES_PATH.glob("*"):
     try:
