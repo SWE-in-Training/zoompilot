@@ -66,8 +66,7 @@ jobs:
             exit 1
           fi
 
-          # blob shas of the scripts that write the pkl, same list the prebuilt workflow checks
-          COMPILE_REF=$(for f in openpilot/selfdrive/modeld/compile_modeld.py openpilot/selfdrive/modeld/get_model_metadata.py openpilot/selfdrive/modeld/compile_dm_warp.py openpilot/system/camerad/cameras/nv12_info.py; do git rev-parse "HEAD:${f}"; done | sha256sum | cut -d' ' -f1)
+          COMPILE_REF=$(python3 openpilot/sunnypilot/models/compile_ref.py)
 
           SAFE_NAME="${NAME// /-}"
           echo "model_name=${NAME}" >> $GITHUB_OUTPUT
