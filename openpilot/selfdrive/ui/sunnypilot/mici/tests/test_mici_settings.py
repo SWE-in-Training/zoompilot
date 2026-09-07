@@ -571,49 +571,67 @@ class TestAcceleratorProgressRenders:
 
 class TestAcceleratorIconState:
   """The home screen and sidebar draw ui_state.chestnut_state. For a backend
-  the comma is the USB gadget for, the state has to come from deviceState and
-  the progress param, not from a USB id the comma will never enumerate."""
+  the comma is the USB gadget for, the state has to come from the accelerator
+  view and the progress param, not from a USB id the comma will never enumerate.
+  A fitted chestnut keeps upstream's state machine untouched."""
 
   class FakeSM:
-    def __init__(self, present):
-      self.present = present
-      self.recv_frame = {"modelV2": 0}
-      self.alive = {"modelV2": False}
+    def __init__(self, big=False, alive=False, recv=0):
+      self.recv_frame = {"modelV2": recv}
+      self.alive = {"modelV2": alive}
+      self.big = big
 
     def __getitem__(self, name):
-      assert name == "deviceState"
-      return type("DS", (), {"chestnutPresent": self.present})()
+      if name == "deviceState":
+        return type("DS", (), {"chestnutPresent": False})()
+      assert name == "modelV2"
+      return type("M", (), {"big": self.big})()
 
-  def _state(self, present, compiled, progress):
+  @staticmethod
+  def _view(present=True, ready=False, progress=None, state='none'):
+    from openpilot.selfdrive.ui.sunnypilot.ui_state import AcceleratorView
+    return AcceleratorView(present, ready, progress, True, state)
+
+  def _state(self, view, sm=None, started=False):
     from openpilot.selfdrive.ui.ui_state import ui_state
-    saved = ui_state.sm, ui_state.started, ui_state.chestnut_compiled, ui_state.accelerator_progress
-    ui_state.sm, ui_state.started = self.FakeSM(present), False
-    ui_state.chestnut_compiled, ui_state.accelerator_progress = compiled, progress
+    saved = ui_state.sm, ui_state.started, ui_state.started_frame, ui_state.accelerator_view
+    ui_state.sm, ui_state.started, ui_state.started_frame = sm or self.FakeSM(), started, 0
+    ui_state.accelerator_view = view
     try:
       ui_state._update_chestnut_state()
       return ui_state.chestnut_state
     finally:
-      ui_state.sm, ui_state.started, ui_state.chestnut_compiled, ui_state.accelerator_progress = saved
+      ui_state.sm, ui_state.started, ui_state.started_frame, ui_state.accelerator_view = saved
 
   def test_offroad_states(self, params):
     from openpilot.selfdrive.ui.ui_state import ChestnutState
-    assert self._state(False, False, None) == ChestnutState.DISCONNECTED
-    assert self._state(True, True, None) == ChestnutState.READY
-    assert self._state(True, False, None) == ChestnutState.UNCOMPILED
-    assert self._state(True, False, {'stage': 'build', 'frac': 0.3}) == ChestnutState.LOADING
-    assert self._state(True, False, {'stage': 'failed', 'frac': 1.0}) == ChestnutState.FAILED
-    assert self._state(True, True, {'stage': 'connect', 'frac': 0.0}) == ChestnutState.LOADING
-    assert self._state(True, True, {'stage': 'failed', 'frac': 1.0}) == ChestnutState.FAILED
-    assert self._state(True, True, {'stage': 'ready', 'frac': 1.0}) == ChestnutState.READY
+    assert self._state(self._view(present=False)) == ChestnutState.DISCONNECTED
+    assert self._state(self._view(ready=True)) == ChestnutState.READY
+    assert self._state(self._view()) == ChestnutState.UNCOMPILED
+    assert self._state(self._view(progress={'stage': 'build', 'frac': 0.3})) == ChestnutState.LOADING
+    assert self._state(self._view(progress={'stage': 'failed', 'frac': 1.0})) == ChestnutState.FAILED
+    assert self._state(self._view(ready=True, progress={'stage': 'connect', 'frac': 0.0})) == ChestnutState.LOADING
+    assert self._state(self._view(ready=True, progress={'stage': 'failed', 'frac': 1.0})) == ChestnutState.FAILED
+    assert self._state(self._view(ready=True, progress={'stage': 'ready', 'frac': 1.0})) == ChestnutState.READY
 
   def test_absent_accelerator_does_not_pulse_onroad(self, params):
-    from types import SimpleNamespace
-    from openpilot.selfdrive.ui.ui_state import UIState, ChestnutState
+    from openpilot.selfdrive.ui.ui_state import ChestnutState
+    view = self._view(present=False, ready=True, state='retrying')
+    assert self._state(view, self.FakeSM(alive=True, recv=1), started=True) == ChestnutState.DISCONNECTED
 
-    state = SimpleNamespace(sm=self.FakeSM(False), started=True, started_frame=0,
-                            chestnut_loading=True)
-    UIState._update_chestnut_state(state)
-    assert state.chestnut_state == ChestnutState.DISCONNECTED
+  def test_onroad_states(self, params):
+    from openpilot.selfdrive.ui.ui_state import ChestnutState
+    driving = self.FakeSM(alive=True, recv=1)
+    assert self._state(self._view(ready=True, state='joining'), driving, started=True) == ChestnutState.LOADING
+    assert self._state(self._view(ready=True, state='retrying'), driving, started=True) == ChestnutState.LOADING
+    assert self._state(self._view(ready=True, state='running'), driving, started=True) == ChestnutState.ACTIVE
+    assert self._state(self._view(ready=True, state='unavailable'), driving, started=True) == ChestnutState.FAILED
+    assert self._state(self._view(ready=False, state='none'), driving, started=True) == ChestnutState.UNCOMPILED
+    # nothing from modeld yet is loading, not failed
+    assert self._state(self._view(ready=True), self.FakeSM(), started=True) == ChestnutState.LOADING
+    # a big frame is proof, whatever the status field says
+    big = self.FakeSM(big=True, alive=True, recv=1)
+    assert self._state(self._view(ready=True, state='unavailable'), big, started=True) == ChestnutState.ACTIVE
 
 
 class TestAcceleratorModelSelection:
@@ -621,13 +639,13 @@ class TestAcceleratorModelSelection:
     from unittest import mock
     from openpilot.selfdrive.ui.sunnypilot.mici.layouts.models import ModelsLayoutMici
 
-    choice = {'backend': 'jetlink', 'name': 'Cinque Terre', 'selected': False, 'cached': True}
+    choice = {'name': 'Cinque Terre', 'selected': False, 'cached': True}
     layout = ModelsLayoutMici()
     with mock.patch('openpilot.selfdrive.ui.sunnypilot.mici.layouts.models.accelerators.select_model') as select, \
          mock.patch('openpilot.selfdrive.ui.sunnypilot.mici.layouts.models.ui_state.is_offroad', return_value=True), \
          mock.patch.object(layout, '_pop_to_main'), mock.patch.object(params, 'put') as put:
       layout._choose_accelerator(choice)
-      select.assert_called_once_with('jetlink', 'Cinque Terre')
+      select.assert_called_once_with('Cinque Terre')
       put.assert_not_called()
 
   def test_selection_that_crosses_ignition_does_not_change_the_model(self, params):
@@ -637,51 +655,57 @@ class TestAcceleratorModelSelection:
     layout = ModelsLayoutMici()
     with mock.patch('openpilot.selfdrive.ui.sunnypilot.mici.layouts.models.accelerators.select_model') as select, \
          mock.patch('openpilot.selfdrive.ui.sunnypilot.mici.layouts.models.ui_state.is_offroad', return_value=False):
-      layout._choose_accelerator({'backend': 'jetlink', 'name': 'Cinque Terre'})
+      layout._choose_accelerator({'name': 'Cinque Terre'})
       select.assert_not_called()
+
+  @staticmethod
+  def _usb(present):
+    from contextlib import ExitStack
+    from unittest import mock
+    from openpilot.selfdrive.ui import ui_state as module
+    stack = ExitStack()
+    stack.enter_context(mock.patch.object(module, 'read_int', return_value=1))
+    stack.enter_context(mock.patch.object(module, 'get_usb_state', return_value=[]))
+    stack.enter_context(mock.patch("openpilot.sunnypilot.accelerators.present", return_value=present))
+    return stack
 
   def test_a_present_accelerator_is_not_an_unknown_usb_device(self, params):
     import time
-    from unittest import mock
-    from openpilot.selfdrive.ui import ui_state as module
     from openpilot.selfdrive.ui.ui_state import ui_state
-    saved = ui_state.usb_connected, ui_state.usb_connected_ts, ui_state.usb_unknown, ui_state.chestnut_present
+    saved = ui_state.usb_connected, ui_state.usb_connected_ts, ui_state.usb_unknown, ui_state.accelerator_view
     try:
-      ui_state.usb_connected, ui_state.usb_connected_ts = True, time.monotonic() - 11.0
-      ui_state.usb_unknown, ui_state.chestnut_present = False, True
-      with mock.patch.object(module, 'read_int', return_value=1), \
-           mock.patch.object(module, 'get_usb_state', return_value=[]):
-        ui_state.update_params()
+      ui_state.usb_connected, ui_state.usb_connected_ts, ui_state.usb_unknown = True, time.monotonic() - 11.0, False
+      with self._usb(present=True):
+        ui_state.update_params()  # builds the view
+        ui_state.usb_connected_ts = time.monotonic() - 11.0
+        ui_state.update_params()  # decides
+      assert ui_state.accelerator_view is not None
       assert ui_state.usb_unknown is False
-      ui_state.usb_connected_ts, ui_state.chestnut_present = time.monotonic() - 11.0, False
-      with mock.patch.object(module, 'read_int', return_value=1), \
-           mock.patch.object(module, 'get_usb_state', return_value=[]):
+      with self._usb(present=False):
         ui_state.update_params()
+        ui_state.usb_connected_ts = time.monotonic() - 11.0
+        ui_state.update_params()
+      assert ui_state.accelerator_view is None
       assert ui_state.usb_unknown is True
     finally:
-      ui_state.usb_connected, ui_state.usb_connected_ts, ui_state.usb_unknown, ui_state.chestnut_present = saved
+      ui_state.usb_connected, ui_state.usb_connected_ts, ui_state.usb_unknown, ui_state.accelerator_view = saved
 
   def test_an_accelerator_recognised_after_the_grace_period_clears_unknown(self, params):
     """The cable is seen from power-on but the Jetson configures the gadget
     ~25 s after the UI starts, so the one-shot decision has already said
     "unknown" by then. Presence arriving later must still clear it."""
-    from unittest import mock
-    from openpilot.selfdrive.ui import ui_state as module
     from openpilot.selfdrive.ui.ui_state import ui_state
-    saved = ui_state.usb_connected, ui_state.usb_connected_ts, ui_state.usb_unknown, ui_state.chestnut_present
+    saved = ui_state.usb_connected, ui_state.usb_connected_ts, ui_state.usb_unknown, ui_state.accelerator_view
     try:
-      ui_state.usb_connected, ui_state.usb_connected_ts = True, None
-      ui_state.usb_unknown, ui_state.chestnut_present = True, False
-      with mock.patch.object(module, 'read_int', return_value=1), \
-           mock.patch.object(module, 'get_usb_state', return_value=[]) as scan:
+      ui_state.usb_connected, ui_state.usb_connected_ts, ui_state.usb_unknown = True, None, True
+      with self._usb(present=False):
         ui_state.update_params()
         assert ui_state.usb_unknown is True
-        ui_state.chestnut_present = True
+      with self._usb(present=True):
         ui_state.update_params()
         assert ui_state.usb_unknown is False
-        scan.assert_not_called()
     finally:
-      ui_state.usb_connected, ui_state.usb_connected_ts, ui_state.usb_unknown, ui_state.chestnut_present = saved
+      ui_state.usb_connected, ui_state.usb_connected_ts, ui_state.usb_unknown, ui_state.accelerator_view = saved
 
 
 class TestAcceleratorLinkToggle:
