@@ -398,24 +398,32 @@ class HardwareComma(HardwareBase):
     ms = self.get_modem_state()
     return ms.get('tx_bytes', -1), ms.get('rx_bytes', -1)
 
+  # 10 ms is tuned for an H7 that comes back on SPI. The comma three's dos then
+  # has to re-enumerate on USB, and the last comma three validated release held
+  # these an order of magnitude longer, so keep its widths on a tici.
+  def _panda_reset_hold(self) -> tuple[float, float]:
+    return (1.0, 0.5) if self.get_device_type() == "tici" else (0.01, 0.01)
+
   def reset_internal_panda(self):
     gpio_init(GPIO.STM_RST_N, True)
     gpio_init(GPIO.STM_BOOT0, True)
 
+    reset_hold, _ = self._panda_reset_hold()
     gpio_set(GPIO.STM_RST_N, True)
     gpio_set(GPIO.STM_BOOT0, False)
-    time.sleep(0.01)
+    time.sleep(reset_hold)
     gpio_set(GPIO.STM_RST_N, False)
 
   def recover_internal_panda(self):
     gpio_init(GPIO.STM_RST_N, True)
     gpio_init(GPIO.STM_BOOT0, True)
 
+    _, recover_hold = self._panda_reset_hold()
     gpio_set(GPIO.STM_RST_N, True)
     gpio_set(GPIO.STM_BOOT0, True)
-    time.sleep(0.01)
+    time.sleep(recover_hold)
     gpio_set(GPIO.STM_RST_N, False)
-    time.sleep(0.01)
+    time.sleep(recover_hold)
     gpio_set(GPIO.STM_BOOT0, False)
 
   def booted(self):

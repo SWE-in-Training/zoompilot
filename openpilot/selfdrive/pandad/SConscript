@@ -3,14 +3,20 @@ Import('env', 'arch', 'common', 'messaging')
 if arch != "Darwin":
   pandad_env = env.Clone()
 
-  # comma-deps-libusb is a tools extra, and a device installs no python
-  # dependencies at build time, so fall back to the system libusb the way
-  # pandad did before the USB transport was removed.
+  # Prefer the vendored comma-deps-libusb, which AGNOS carries in its own venv,
+  # and otherwise fall back to the system libusb the way pandad did before the
+  # USB transport was removed. comma-deps-libusb is only a tools extra here, so
+  # a plain `uv sync` does not have it.
+  #
+  # Not just ImportError: there is an unrelated package on PyPI also called
+  # libusb, and it imports fine but has no INCLUDE_DIR. SConstruct turns SCons
+  # warnings into exceptions and does not swallow them while reading an
+  # SConscript, so letting that AttributeError out kills the whole build.
   try:
     import libusb
     pandad_env['CPPPATH'] += [libusb.INCLUDE_DIR]
     pandad_env['LIBPATH'] += [libusb.LIB_DIR]
-  except ImportError:
+  except Exception:
     pass
 
   libs = [common, messaging, 'pthread', 'usb-1.0']

@@ -100,6 +100,9 @@ def main() -> None:
   except Exception:
     cloudlog.exception("pandad.uncaught_exception")
 
+  # The comma three's internal panda is a dos, and it is on USB.
+  usb_panda = HARDWARE.get_device_type() == "tici"
+
   count = 0
   while not do_exit:
     try:
@@ -109,6 +112,14 @@ def main() -> None:
       else:
         HARDWARE.recover_internal_panda()
       count += 1
+
+      # This loop was written for an H7 on SPI, which is addressable again
+      # milliseconds after a reset, so it resets on every pass and never waits.
+      # A dos has to re-enumerate on USB first. Without this the list below runs
+      # while the panda is still coming up, the next pass drops it into DFU, and
+      # the pass after that reflashes a panda that was never broken.
+      if usb_panda:
+        time.sleep(3)
 
       # Flash all Pandas in DFU mode
       for serial in PandaDFU.list():

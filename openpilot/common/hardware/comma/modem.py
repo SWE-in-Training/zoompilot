@@ -9,6 +9,13 @@ import string
 import struct
 import subprocess
 import tempfile
+import termios
+import time
+
+from contextlib import contextmanager
+from ipaddress import IPv4Address, AddressValueError
+
+from enum import Enum
 
 
 def get_device_model() -> str:
@@ -17,13 +24,6 @@ def get_device_model() -> str:
       return f.read().strip("\x00").strip().split("comma ")[-1]
   except OSError:
     return ""
-import termios
-import time
-
-from contextlib import contextmanager
-from ipaddress import IPv4Address, AddressValueError
-
-from enum import Enum
 
 logging.basicConfig(
   level=logging.INFO,
