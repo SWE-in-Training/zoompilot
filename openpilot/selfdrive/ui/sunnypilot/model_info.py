@@ -39,15 +39,8 @@ def big_model_state() -> str | None:
 
 
 def big_model_progress() -> tuple[str, float, str] | None:
-  """(stage, 0..1, message) while an accelerator is working, else None.
-
-  Reads to the user exactly like the on-device compilation big_model_state()
-  reports. Lives next to it so every layout gets it, not only the one that asked.
-
-  The message is carried because a fraction is not always meaningful: a build
-  has one, but "waiting for the jetson" does not, and rendering that as
-  "connect 0%" tells the driver nothing about what is being waited for.
-  """
+  """(stage, 0..1, message) while an accelerator is working, else None. The message
+  is carried because a stage like "waiting for the jetson" has no meaningful fraction"""
   progress = getattr(ui_state, 'accelerator_progress', None)
   if not progress:
     return None

@@ -318,8 +318,7 @@ def hardware_thread(end_event, hw_queue) -> None:
                            params.get_bool("ChestnutLoading"), params.get("ChestnutActive"),
                            chestnut_state if chestnut_valid else None, set_offroad_alert_if_changed)
 
-    # An accelerator the user asked for that cannot come up - a missing package,
-    # a kernel without the USB gadget drivers - is otherwise silently absent.
+    # an enabled accelerator that cannot come up is otherwise silently absent
     accelerator_error = accelerators.unavailable_reason()
     set_offroad_alert_if_changed("Offroad_AcceleratorUnavailable", accelerator_error is not None,
                                  extra_text=accelerator_error)
@@ -462,9 +461,7 @@ def hardware_thread(end_event, hw_queue) -> None:
     # Check if we need to shut down
     if power_monitor.should_shutdown(onroad_conditions["ignition"], in_car, off_ts, started_seen):
       cloudlog.warning(f"shutting device down, offroad since {off_ts}")
-      # An accelerator on its own supply outlives us; give it the same news.
-      # deviceState pauses for up to the timeout while it goes out; with
-      # jetlink disabled this is one param read.
+      # an accelerator on its own supply outlives us; one param read when jetlink is off
       accelerators.shutdown(f"comma shutting down, offroad since {off_ts}", timeout=25.0)
       params.put_bool("DoShutdown", True, block=True)
 

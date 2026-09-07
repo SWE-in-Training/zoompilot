@@ -497,12 +497,7 @@ class TestLayoutsSurviveRender:
 
 
 class TestAcceleratorProgressRenders:
-  """The models panel's provisioning line.
-
-  Provisioning an accelerator is an upload plus a build, minutes long, and this
-  is the only place a user sees it happening. The layout sweep above runs with
-  no progress set, so none of these branches is covered by it.
-  """
+  """the models panel's provisioning line; the layout sweep above runs with no progress set"""
 
   STAGES = ['download', 'connect', 'upload', 'build', 'failed']
 
@@ -525,10 +520,8 @@ class TestAcceleratorProgressRenders:
     assert '42%' in info
 
   def test_a_message_is_shown_instead_of_a_percentage_that_means_nothing(self, params):
-    # A join has nothing to measure: it is waiting for a Jetson to boot, or
-    # for a safe frame to swap on. Rendering that as "connect 0%" tells the
-    # driver nothing, and "getting ready" alone does not separate a Jetson
-    # that is unplugged from one six seconds from ready.
+    # a join has nothing to measure, and "getting ready" alone does not separate an
+    # unplugged Jetson from one six seconds from ready
     from openpilot.selfdrive.ui.ui_state import ui_state
     ui_state.accelerator_progress = {'stage': 'connect', 'frac': 0.0, 'msg': 'waiting for the jetson'}
     try:
@@ -570,10 +563,8 @@ class TestAcceleratorProgressRenders:
 
 
 class TestAcceleratorIconState:
-  """The home screen and sidebar draw ui_state.chestnut_state. For a backend
-  the comma is the USB gadget for, the state has to come from the accelerator
-  view and the progress param, not from a USB id the comma will never enumerate.
-  A fitted chestnut keeps upstream's state machine untouched."""
+  """chestnut_state for an off-board accelerator comes from the view and the progress
+  param, not a USB id the comma never enumerates. a fitted chestnut keeps upstream's path"""
 
   class FakeSM:
     def __init__(self, big=False, alive=False, recv=0):
@@ -691,9 +682,8 @@ class TestAcceleratorModelSelection:
       ui_state.usb_connected, ui_state.usb_connected_ts, ui_state.usb_unknown, ui_state.accelerator_view = saved
 
   def test_an_accelerator_recognised_after_the_grace_period_clears_unknown(self, params):
-    """The cable is seen from power-on but the Jetson configures the gadget
-    ~25 s after the UI starts, so the one-shot decision has already said
-    "unknown" by then. Presence arriving later must still clear it."""
+    """the Jetson configures the gadget ~25 s after the UI starts, after the one-shot
+    usb_unknown decision; presence arriving later must still clear it"""
     from openpilot.selfdrive.ui.ui_state import ui_state
     saved = ui_state.usb_connected, ui_state.usb_connected_ts, ui_state.usb_unknown, ui_state.accelerator_view
     try:
@@ -709,11 +699,7 @@ class TestAcceleratorModelSelection:
 
 
 class TestAcceleratorLinkToggle:
-  """The models panel's on / off control over the accelerator link.
-
-  On is the only enable, and the control is hidden on a device it means nothing
-  to: a plain comma must not grow a setting for hardware it will never see.
-  """
+  """on is the only enable, and the control is hidden on a device it means nothing to"""
 
   PARAM = "JetlinkEnabled"
 
