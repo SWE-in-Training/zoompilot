@@ -59,11 +59,11 @@
     "url": "REPLACED_BY_BUILD",
     "hash": "REPLACED_BY_BUILD",
     "hash_raw": "REPLACED_BY_BUILD",
-    "size": 46897152,
+    "size": "REPLACED_BY_BUILD",
     "sparse": false,
     "full_check": true,
     "has_ab": true,
-    "ondevice_hash": "d12e1e5b9455b62a1464558716493b33e470d7a7e88da1c4105a3b21d0961808",
+    "ondevice_hash": "REPLACED_BY_BUILD",
     "_comment": "Built by .github/workflows/zoompilot-agnos-tici-boot.yaml from commaai/agnos-kernel-sdm845 with comma_tici.dts restored. Not installable until this entry is filled in by that workflow."
   },
   {
