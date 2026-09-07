@@ -13,6 +13,21 @@ import requests
 SPARSE_CHUNK_FMT = struct.Struct('H2xI4x')
 
 AGNOS_MANIFEST_FILE = "openpilot/system/hardware/comma/agnos.json"
+AGNOS_MANIFEST_FILE_TICI = "openpilot/system/hardware/comma/tici_agnos.json"
+
+
+def get_device_model() -> str:
+  try:
+    with open("/sys/firmware/devicetree/base/model") as f:
+      return f.read().strip("\x00").strip().split("comma ")[-1]
+  except OSError:
+    return ""
+
+
+def get_manifest_file() -> str:
+  """The comma three needs its own boot image; every other partition is comma's."""
+  return AGNOS_MANIFEST_FILE_TICI if get_device_model() == "tici" else AGNOS_MANIFEST_FILE
+
 
 
 class StreamingDecompressor:

@@ -21,6 +21,9 @@ function agnos_init {
   if [ $(< /VERSION) != "$AGNOS_VERSION" ]; then
     AGNOS_PY="$DIR/openpilot/common/hardware/comma/agnos.py"
     MANIFEST="$DIR/openpilot/system/hardware/comma/agnos.json"
+    if grep -qa "comma tici" /sys/firmware/devicetree/base/model 2>/dev/null; then
+      MANIFEST="$DIR/openpilot/system/hardware/comma/tici_agnos.json"
+    fi
     if $AGNOS_PY --verify $MANIFEST; then
       sudo reboot
     fi

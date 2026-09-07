@@ -210,7 +210,8 @@ def handle_agnos_update() -> None:
 
   cloudlog.info(f"Beginning background installation for AGNOS {updated_version}")
 
-  manifest_path = os.path.join(OVERLAY_MERGED, "openpilot/system/hardware/comma/agnos.json")
+  from openpilot.common.hardware.comma.agnos import get_manifest_file
+  manifest_path = os.path.join(OVERLAY_MERGED, get_manifest_file())
   target_slot_number = get_target_slot_number()
   flash_agnos_update(manifest_path, target_slot_number, cloudlog)
 
