@@ -50,7 +50,8 @@ public:
 
   static void set_ir_power(int percent) {
     auto device = get_device_type();
-    if (device == cereal::InitData::DeviceType::TIZI) {
+    if (device == cereal::InitData::DeviceType::TICI ||
+        device == cereal::InitData::DeviceType::TIZI) {
       return;
     }
 
