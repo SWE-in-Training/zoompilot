@@ -6,7 +6,7 @@ import time
 import signal
 import subprocess
 
-from panda import Panda, PandaDFU, PandaProtocolMismatch, McuType, FW_PATH
+from panda import Panda, PandaDFU, PandaProtocolMismatch, FW_PATH
 from openpilot.common.basedir import BASEDIR
 from openpilot.common.params import Params
 from openpilot.common.hardware import HARDWARE
@@ -15,8 +15,8 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.sunnypilot.selfdrive.pandad.rivian_long_flasher import flash_rivian_long
 
 
-def get_expected_signature() -> bytes:
-  fn = os.path.join(FW_PATH, McuType.H7.config.app_fn)
+def get_expected_signature(panda: Panda) -> bytes:
+  fn = os.path.join(FW_PATH, panda.get_mcu_type().config.app_fn)
   return Panda.get_signature_from_firmware(fn)
 
 def flash_panda(panda_serial: str):
@@ -28,7 +28,7 @@ def flash_panda(panda_serial: str):
     panda.close()
     return
 
-  fw_signature = get_expected_signature()
+  fw_signature = get_expected_signature(panda)
   internal_panda = panda.is_internal()
 
   panda_version = "bootstub" if panda.bootstub else panda.get_version()
@@ -129,7 +129,7 @@ def main() -> None:
 
         # run real pandad
         os.environ['MANAGER_DAEMON'] = 'pandad'
-        process = subprocess.Popen(["./pandad"], cwd=os.path.join(BASEDIR, "openpilot/selfdrive/pandad"))
+        process = subprocess.Popen(["./pandad", panda_serials[0]], cwd=os.path.join(BASEDIR, "openpilot/selfdrive/pandad"))
         process.wait()
     # TODO: wrap all panda exceptions in a base panda exception
     except (usb1.USBErrorNoDevice, usb1.USBErrorPipe):
