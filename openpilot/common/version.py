@@ -26,6 +26,9 @@ CHESTNUT_BRANCHES = {
 }
 
 SP_BRANCH_MIGRATIONS = {
+  ("tici", "develop"): "develop-tici",
+  ("tici", "main"): "develop-tici",
+  ("tici", "danger-unstable"): "danger-unstable-tici",
   ("tici", "staging-c3-new"): "staging-tici",
   ("tici", "dev-c3-new"): "staging-tici",
   ("tici", "master"): "master-tici",
