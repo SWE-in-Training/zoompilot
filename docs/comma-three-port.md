@@ -121,6 +121,32 @@ transport from pandad, so on this tree a comma three can neither flash nor talk 
 Both are being restored. This is safety-critical firmware that has never been run on a car in this
 form; treat the first drive accordingly.
 
+### panda, in detail
+
+The `c3` branch of our panda fork restores the F4 target and the dos board. It builds clean under
+`-Werror` for both targets and the firmware fits comfortably: 95104 B of flash (9%) and 199168 of
+262144 B RAM (76%), which `check_fw_size.py` accepts. `board/boards/board_declarations.h` had not
+changed since the reference C3 branch was cut, so `dos.h` matches today's `struct board` field for
+field.
+
+Four gaps are known and none is fixed:
+
+1. **CAN-FD safety modes are no longer refused on a bxCAN panda.** The `#ifdef CANFD` gate that used
+   to keep `hyundai_canfd` hooks off an F4 now lives in opendbc, not panda, so restoring it here was
+   not possible without changing safety code shared by every device we ship. A dos will now accept a
+   CAN-FD safety model instead of falling back to SILENT. It still fails safe, because the rx checks
+   can never validate on a bus that cannot carry the frames, and a comma three could never drive a
+   CAN-FD car anyway. It is a lost layer of defence in depth rather than a live hazard, and it is a
+   decision to take deliberately before anyone drives a CAN-FD car on a comma three.
+2. **`enter_stop_mode()` is a no-op on F4.** The shared implementation is now all H7 registers. Sleep
+   and power-off current draw on a comma three are unmeasured.
+3. **Fan stall recovery is gone.** The shared fan driver dropped the `fan_stall_recovery` and
+   `fan_max_rpm` fields the dos used, and comma's own deleted test said the comma three's fans need
+   it. Exercise the fan across its range on hardware.
+4. **Panda temperature reads 0 C.** The STM32F413 has no digital temperature sensor, and its analog
+   one is unavailable while the ADC is configured for VBAT, which is how the dos has always run. A
+   stub returns 0.0, the same value the H7 driver returns with no valid measurement.
+
 ## Installing on a comma three
 
 The branch **must** end in `-tici`. `openpilot/common/version.py` derives `channel_type` from that
