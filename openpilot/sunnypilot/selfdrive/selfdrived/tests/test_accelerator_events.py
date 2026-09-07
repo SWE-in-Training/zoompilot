@@ -4,8 +4,10 @@ from types import SimpleNamespace
 
 from openpilot.cereal import custom, messaging
 from openpilot.common.prefix import OpenpilotPrefix
+from openpilot.common.realtime import DT_CTRL
 from openpilot.selfdrive.selfdrived.events import Events, EventName, ET
 from openpilot.selfdrive.selfdrived.selfdrived import SelfdriveD
+from openpilot.selfdrive.selfdrived.state import SOFT_DISABLE_TIME, State, StateMachine
 from openpilot.sunnypilot.selfdrive.selfdrived.accelerator_events import AcceleratorEvents
 from openpilot.sunnypilot.selfdrive.selfdrived.events import EVENTS_SP, EventsSP
 
@@ -32,35 +34,64 @@ class TestAcceleratorEvents(unittest.TestCase):
     self.events.clear()
     self.events_sp.clear()
     self.accel.update(self.sm, enabled, self.events, self.events_sp)
-    return EventName.bigModelLoading in self.events.names, EventNameSP.bigModelLinkLost in self.events_sp.names
+    return (EventName.bigModelLoading in self.events.names, EventName.bigModelFailed in self.events.names,
+            EventNameSP.bigModelLinkLost in self.events_sp.names)
 
   def test_joining_blocks_only_while_modelv2_is_held_back(self):
-    self.assertEqual(self.step(state='joining', alive=False), (True, False))
-    self.assertEqual(self.step(state='joining', alive=False), (True, False))
+    self.assertEqual(self.step(state='joining', alive=False), (True, False, False))
+    self.assertEqual(self.step(state='joining', alive=False), (True, False, False))
     # a late join onto a publishing modelV2 never keeps the driver out
-    self.assertEqual(self.step(state='joining', alive=True), (False, False))
-    self.assertEqual(self.step(state='none', alive=False), (False, False))
-    self.assertEqual(self.step(state='running', alive=False), (False, False))
+    self.assertEqual(self.step(state='joining', alive=True), (False, False, False))
+    self.assertEqual(self.step(state='none', alive=False), (False, False, False))
+    self.assertEqual(self.step(state='running', alive=False), (False, False, False))
 
-  def test_link_lost_while_engaged_fires_once(self):
-    self.assertEqual(self.step(state='running', big=True, enabled=True), (False, False))
-    self.assertEqual(self.step(state='retrying', big=False, enabled=True), (False, True))
+  def test_link_lost_while_engaged_latches_until_disengage(self):
+    self.assertEqual(self.step(state='running', big=True, enabled=True), (False, False, False))
+    # both events, every tick: the native one drives the main state machine's
+    # soft disable, the sunnypilot one drives MADS and carries the guidance
     for _ in range(10):
-      self.assertEqual(self.step(state='retrying', big=False, enabled=True), (False, False))
-    # a rejoin rearms it
-    self.assertEqual(self.step(state='running', big=True, enabled=True), (False, False))
-    self.assertEqual(self.step(state='unavailable', big=False, enabled=True), (False, True))
+      self.assertEqual(self.step(state='retrying', big=False, enabled=True), (False, True, True))
+    # a rejoin while still engaged does not clear it; only a disengage does
+    self.assertEqual(self.step(state='running', big=True, enabled=True), (False, True, True))
+    self.assertEqual(self.step(state='running', big=True, enabled=False), (False, False, False))
+    # and the latch rearms for the next fall
+    self.assertEqual(self.step(state='running', big=True, enabled=True), (False, False, False))
+    self.assertEqual(self.step(state='unavailable', big=False, enabled=True), (False, True, True))
 
   def test_link_lost_while_disengaged_is_silent(self):
-    self.assertEqual(self.step(state='running', big=True, enabled=False), (False, False))
-    self.assertEqual(self.step(state='retrying', big=False, enabled=False), (False, False))
+    self.assertEqual(self.step(state='running', big=True, enabled=False), (False, False, False))
+    self.assertEqual(self.step(state='retrying', big=False, enabled=False), (False, False, False))
     # the fall was consumed: engaging afterwards does not replay it
-    self.assertEqual(self.step(state='retrying', big=False, enabled=True), (False, False))
+    self.assertEqual(self.step(state='retrying', big=False, enabled=True), (False, False, False))
 
   def test_link_lost_ignores_a_chestnut_fall(self):
     # comma's board has the native bigModelFailed for this; the adapter must not double it
-    self.assertEqual(self.step(state='none', big=True, enabled=True), (False, False))
-    self.assertEqual(self.step(state='none', big=False, enabled=True), (False, False))
+    self.assertEqual(self.step(state='none', big=True, enabled=True), (False, False, False))
+    self.assertEqual(self.step(state='none', big=False, enabled=True), (False, False, False))
+
+  def drive_state_machine(self, latched: bool) -> State:
+    """ENABLED, then the adapter's events fed to the real state machine for SOFT_DISABLE_TIME."""
+    machine = StateMachine()
+    machine.state = State.enabled
+    self.step(state='running', big=True, enabled=True)
+    for tick in range(int(SOFT_DISABLE_TIME / DT_CTRL) + 2):
+      self.step(state='retrying', big=False, enabled=True)
+      if not latched and tick > 0:
+        # what a one-tick event looks like to the machine on every tick after the first
+        self.events.clear()
+        self.events_sp.clear()
+      enabled, _ = machine.update(self.events)
+      if not enabled:
+        break
+    return machine.state
+
+  def test_a_latched_loss_takes_the_real_state_machine_to_disabled(self):
+    self.assertEqual(self.drive_state_machine(latched=True), State.disabled)
+
+  def test_a_one_tick_loss_would_not_have(self):
+    # SOFT_DISABLING returns to ENABLED the tick its SOFT_DISABLE event goes
+    # away, which is why the loss has to be latched rather than edge-raised.
+    self.assertEqual(self.drive_state_machine(latched=False), State.enabled)
 
   def test_link_lost_is_a_soft_disable_that_does_not_ask_for_a_restart(self):
     alerts = EVENTS_SP[EventNameSP.bigModelLinkLost]

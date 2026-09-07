@@ -20,8 +20,16 @@ accelerator adapter in place:
   (a) a chestnut that loads:   loading, then one chime on the first big frame
   (b) a chestnut that fails:   loading, one failure, and never a chime
   (c) a jetlink that joins:    loading while modelV2 is held back, one chime
-                               when it promotes, one link-lost when it falls,
-                               and no native failure anywhere in it
+                               when it promotes, and on a fall while engaged
+                               the native bigModelFailed beside bigModelLinkLost
+                               on every tick until the driver disengages
+
+The pair in (c) is deliberate, and it was once asserted the other way round.
+The main state machine consumes native events only and cancels a soft disable
+the tick its event goes away, so a one-tick sunnypilot event never disabled
+anything: the plan shrank from ~200 m to ~5 m and the car stayed engaged.
+bigModelFailed is comma's own "big model gone, small model driving" soft
+disable; bigModelLinkLost is what MADS reads and what carries the guidance.
 
 update_events runs as far as its initialization gate, which is past the big
 model block and the adapter call and short of everything needing a car.
@@ -152,18 +160,28 @@ class JetlinkTrace(TraceTest):
     self.assertEqual(self.step(state=AcceleratorState.running, big=True), ([INIT], ['bigModelReady']))
     for _ in range(10):
       self.assertEqual(self.step(state=AcceleratorState.running, big=True), ([INIT], []))
-    # The link drops mid-drive while engaged. One alert, from the adapter, and
-    # no bigModelFailed: the native block never knew there was a big model.
-    self.assertEqual(self.step(state=AcceleratorState.retrying), ([INIT], ['bigModelLinkLost']))
+    # The link drops mid-drive while engaged. Both events on every tick, both
+    # from the adapter: the native block never knew there was a big model.
+    # The native one is what walks the main state machine through its 3 s
+    # soft disable; a single tick of either would be cancelled the next.
+    for _ in range(10):
+      self.assertEqual(self.step(state=AcceleratorState.retrying), ([INIT, 'bigModelFailed'], ['bigModelLinkLost']))
+    # The soft disable lands and the driver is out. Nothing more is said.
+    self.sd.enabled = False
     for _ in range(10):
       self.assertEqual(self.step(state=AcceleratorState.retrying), ([INIT], []))
     # And it comes back, which a chestnut never does.
     self.assertEqual(self.step(state=AcceleratorState.running, big=True), ([INIT], ['bigModelReady']))
+    self.sd.enabled = True
+    self.assertEqual(self.step(state=AcceleratorState.running, big=True), ([INIT], []))
 
   def test_a_link_that_drops_while_disengaged_says_nothing(self):
     self.sd.enabled = False
     self.assertEqual(self.step(state=AcceleratorState.running, big=True), ([INIT], ['bigModelReady']))
-    # The small model simply carries on. Nothing was taken away from anyone.
+    # The small model simply carries on. Nothing was taken away from anyone,
+    # and engaging afterwards does not replay a fall the driver never felt.
+    self.assertEqual(self.step(state=AcceleratorState.retrying), ([INIT], []))
+    self.sd.enabled = True
     self.assertEqual(self.step(state=AcceleratorState.retrying), ([INIT], []))
 
   def test_nothing_is_said_on_a_device_with_no_accelerator_at_all(self):

@@ -26,6 +26,7 @@ class AcceleratorEvents:
   def __init__(self):
     self.big_model_available = False
     self.big_model_running = False
+    self.link_lost = False
 
   def update(self, sm: messaging.SubMaster, enabled: bool, events: Events, events_sp: EventsSP) -> None:
     status = sm['modelDataV2SP']
@@ -47,8 +48,24 @@ class AcceleratorEvents:
     # ~5 m under the driver. Disengaged, the small model simply carries on.
     # Only counted for our accelerator: a chestnut that drops modelV2.big has
     # the native bigModelFailed for it, and this must not double that alert.
+    #
+    # The loss is latched until the driver disengages, and it raises two
+    # events every tick while latched. Latched, because the state machine
+    # cancels a soft disable the tick its SOFT_DISABLE event disappears, so
+    # an edge raised once never disables anything. Two events, because the
+    # main state machine consumes native events only: bigModelFailed is
+    # comma's own "big model gone, small model driving" soft disable and is
+    # what actually takes the car through SOFT_DISABLE_TIME to disabled;
+    # bigModelLinkLost is what MADS reads and what carries the "reconnecting
+    # if it comes back" guidance. This mirrors the native block's
+    # big_model_active latch, which clears on the same disengage.
     running_big = sm.alive['modelV2'] and sm.valid['modelV2'] and sm['modelV2'].big and \
       status.acceleratorState != AcceleratorState.none
     if self.big_model_running and not running_big and enabled:
-      events_sp.add(EventNameSP.bigModelLinkLost)
+      self.link_lost = True
     self.big_model_running = running_big
+    if not enabled:
+      self.link_lost = False
+    if self.link_lost:
+      events.add(EventName.bigModelFailed)
+      events_sp.add(EventNameSP.bigModelLinkLost)
