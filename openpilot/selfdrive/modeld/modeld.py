@@ -33,7 +33,8 @@ from openpilot.selfdrive.modeld.fill_model_msg import fill_model_msg, fill_drivi
 from openpilot.common.file_chunker import open_file_chunked
 from openpilot.common.hardware.usb import CHESTNUT_USB_IDS
 from openpilot.selfdrive.modeld.constants import ModelConstants, Plan
-from openpilot.selfdrive.modeld.helpers import chestnut_present, chestnut_compiled, chestnut_ready, modeld_pkl_path, load_oob, check_modeld_pkl
+from openpilot.selfdrive.modeld.helpers import (chestnut_present, chestnut_compiled, chestnut_ready, modeld_pkl_path, load_oob,
+                                                check_modeld_pkl, check_camera_jit)
 
 from openpilot.sunnypilot.livedelay.helpers import get_lat_delay
 from openpilot.sunnypilot.modeld_v2.modeld_base import ModelStateBase
@@ -198,6 +199,7 @@ class ModelState(ModelStateBase):
     self.input_queues, self.npy, self.frame_views = make_input_queues(
       self.input_shapes, self.frame_skip, device=self.model_device, frame_copy_size=self.frame_copy_size)
     self.parser = Parser()
+    check_camera_jit(jits['run_model'], cam_w, cam_h, pkl_path)
     self.run_model = jits['run_model'][(cam_w,cam_h)]
 
   def slice_outputs(self, model_outputs: np.ndarray, output_slices: dict[str, slice]) -> dict[str, np.ndarray]:
