@@ -312,14 +312,8 @@ def hardware_thread(end_event, hw_queue) -> None:
 
     set_usb_state(msg.deviceState, last_hw_state.usb_state)
     chestnut.update(started_ts is None, last_hw_state.usb_state)
-    # chestnutState carries whichever accelerator is active, but ChestnutStatus
-    # reads it as comma's board: supply rails, PCIe LTSSM, its firmware string.
-    # A Jetson's telemetry through those checks would raise chestnut alerts about
-    # hardware that is not fitted, so only the board's own message gets in.
-    accel = accelerators.active()
     chestnut_state = sm["chestnutState"]
-    chestnut_valid = (sm.alive["chestnutState"] and sm.valid["chestnutState"]
-                      and (accel is None or accel.name == "chestnut"))
+    chestnut_valid = sm.alive["chestnutState"] and sm.valid["chestnutState"]
     chestnut_status.update(started_ts is None, branch, last_hw_state.usb_state, chestnut.failed,
                            params.get_bool("ChestnutLoading"), params.get("ChestnutActive"),
                            chestnut_state if chestnut_valid else None, set_offroad_alert_if_changed)
@@ -469,7 +463,9 @@ def hardware_thread(end_event, hw_queue) -> None:
     if power_monitor.should_shutdown(onroad_conditions["ignition"], in_car, off_ts, started_seen):
       cloudlog.warning(f"shutting device down, offroad since {off_ts}")
       # An accelerator on its own supply outlives us; give it the same news.
-      accelerators.shutdown(f"comma shutting down, offroad since {off_ts}")
+      # deviceState pauses for up to the timeout while it goes out; with
+      # jetlink disabled this is one param read.
+      accelerators.shutdown(f"comma shutting down, offroad since {off_ts}", timeout=25.0)
       params.put_bool("DoShutdown", True, block=True)
 
     msg.deviceState.started = started_ts is not None and not offroad_mode
