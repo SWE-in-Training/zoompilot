@@ -250,6 +250,27 @@ boot at all, and the usual escape hatch is worse for a comma three than for othe
   work are AGNOS 12.8's and ones built like this. Download 12.8's `boot` image, or keep the
   previous working build, before you flash a new one.
 
+## If the device shows "Unsupported firmware detected"
+
+A black screen reading `Unsupported firmware detected` with a link to
+`commaai/hardware/tree/master/comma_three` is the bootloader refusing the board. It happens before
+openpilot runs, so nothing in openpilot can fix it. The cause was a manifest carrying a newer `abl`
+than 12.8; see the table above.
+
+The device is not bricked. The bootloader is running, which means `xbl` and the boot ROM are fine.
+
+1. **Try the other slot first.** The updater flashes the inactive slot and switches to it, so the
+   slot you were on before the update is still intact. Let it fail its retry count and the
+   bootloader should fall back on its own. From a working shell, `abctl --set_active` back to the
+   previous slot.
+2. **Otherwise reflash AGNOS 12.8 over QDL.** 12.8 is the last release comma built for the comma
+   three and it is still on the CDN. Get the device into QDL mode as described at
+   <https://flash.comma.ai>, then flash 12.8's images with `agnos-builder/tools/qdl`. Do **not** use
+   flash.comma.ai's own bundle: it serves current AGNOS, which has neither a `comma_tici` device
+   tree nor a compatible `abl`, so it puts the device back into exactly this state.
+3. Then install `develop-tici` again. With 12.8's `abl` pinned, the update no longer replaces the
+   bootloader with one that rejects the board.
+
 ## Files
 
 | path | what |
