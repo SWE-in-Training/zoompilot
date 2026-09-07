@@ -57,15 +57,15 @@
   },
   {
     "name": "boot",
-    "url": "https://github.com/zoompilot/zoompilot/releases/download/agnos-tici-boot-2/boot-5ddf0e0f76594604fe785e71e8669be246980fdfe47b31702ad54ca386561056.img.xz",
-    "hash": "5ddf0e0f76594604fe785e71e8669be246980fdfe47b31702ad54ca386561056",
-    "hash_raw": "5ddf0e0f76594604fe785e71e8669be246980fdfe47b31702ad54ca386561056",
-    "size": 47269888,
+    "url": "https://github.com/zoompilot/zoompilot/releases/download/agnos-tici-boot-gz/boot-ec87ba917aae0f2090af24602b7ebbdc282c3c73056b8e42c5cd327209c727bc.img.xz",
+    "hash": "ec87ba917aae0f2090af24602b7ebbdc282c3c73056b8e42c5cd327209c727bc",
+    "hash_raw": "ec87ba917aae0f2090af24602b7ebbdc282c3c73056b8e42c5cd327209c727bc",
+    "size": 17864704,
     "sparse": false,
     "full_check": true,
     "has_ab": true,
-    "ondevice_hash": "8b287fd8e9cc2a1192c8efa78f826052cc8a8335a2430dae44b7ef55d35e68c2",
-    "_comment": "kernel c368754c26c7b9659de187addc6cccedc6cfb0a0 with comma_tici.dts restored, agnos-builder 8f7207a4f083ce3215f893a01b74613c507cc4bc, run 34095452478"
+    "ondevice_hash": "8679badc3a2689924b63ec44d6924fcb2322a63a774eedeb361ba31350cfcf7f",
+    "_comment": "kernel c368754c26c7b9659de187addc6cccedc6cfb0a0 with comma_tici.dts restored, gzip packaged, agnos-builder 8f7207a4f083ce3215f893a01b74613c507cc4bc, run 34150778860"
   },
   {
     "name": "system",

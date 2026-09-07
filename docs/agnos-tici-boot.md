@@ -5,9 +5,9 @@ cannot take from comma, publishes it as a release asset, and fills in the `boot`
 `openpilot/common/hardware/comma/tici_agnos.json`.
 
 **The first image built from this workflow could not be flashed at all.** It was packaged
-uncompressed and came out 372736 bytes larger than the boot partition, which is what left a tester
-sitting on the bootloader splash. See [Sizing](#sizing). Read [Recovery](#recovery) before you
-flash anything.
+uncompressed and came out larger than the boot partition, which is what left a tester sitting on
+the bootloader splash. The current image is gzipped and fits. See [Sizing](#sizing). Nothing here
+has yet booted a comma three; read [Recovery](#recovery) before you flash anything.
 
 ## Why
 
@@ -71,7 +71,7 @@ The boot partition has no slack in it, and a comma three's is the small one.
 | FrogPilot's rebuilt 18.4, gzip, 4 dtbs | 18130944 |
 | AGNOS 19.7, uncompressed, 3 dtbs | 46897152 |
 | ours as first published, uncompressed, 4 dtbs | 47269888 |
-| ours, gzip, 4 dtbs | 17860608 |
+| ours, gzip, 4 dtbs | 17864704 |
 
 | boot partition | bytes | who has it |
 |---|---|---|
