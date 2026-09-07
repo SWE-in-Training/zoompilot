@@ -3,8 +3,8 @@
 This documents the `-tici` branches: what the comma three needs that the comma 3X and comma 4 do
 not, why each difference exists, and what is still unverified.
 
-**Status: published, and unflown.** `develop-tici` and `danger-unstable-tici` are on
-`zoompilot/zoompilot`, so every branch the migrations and the picker point at exists.
+**Status: published, and unflown.** `develop-tici` is on `zoompilot/zoompilot` and is the only
+tici branch, so every migration and the branch picker point at it.
 `zoompilot/panda` branch `c3` carries the restored F4 target and the pinned commit resolves on the
 remote. The AGNOS boot image is built, published and verified, and `tici_agnos.json` points at it
 with no placeholders left.
