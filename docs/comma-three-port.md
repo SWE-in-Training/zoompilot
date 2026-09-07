@@ -64,6 +64,13 @@ so nothing from it applies directly, but it is the reference for what the restor
   restoring only tizi left the comma three writing to LED sysfs nodes it does not have.
 - **NVMe**: the storage-missing offroad alert, and loggerd added to `ignored_processes`, because
   some comma threes drop their NVMe mid-drive and crash loggerd on write. Factory reset wipes it.
+  The mount itself also has to be restored. `3cc433660d` ("no nvme", 2025-08-26) dropped
+  `/dev/nvme0n1 /data/media` from the AGNOS fstab, along with the `mkdir /data/media` in
+  `fs_setup.sh` and `nvme-cli`, in the same commit that bumped the kernel to the pin that deletes
+  `comma_tici.dts`. openpilot did not follow: `hw.py` still logs to `/data/media/0/realdata` and
+  `hardwared` still raises `Offroad_StorageMissing` on a tici when that is not a mount. We do not
+  ship a patched system image, so `tici_storage_init` in `launch_chffrplus.sh` mounts it on boot.
+  It never formats; an unformatted drive is a factory reset and that is the user's call.
 - **IRQ affinity**: the comma three's pandas are on USB, so `xhci-hcd:usb1`/`usb3` get pinned the
   way `spi_geni` is on the other devices.
 - **UI**: AR0231 reports exposure on a different scale, so auto-brightness needs a 6x factor; the
