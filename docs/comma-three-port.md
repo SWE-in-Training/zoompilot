@@ -3,12 +3,17 @@
 This documents the `-tici` branches: what the comma three needs that the comma 3X and comma 4 do
 not, why each difference exists, and what is still unverified.
 
-**Status: complete, and unflown.** Every piece is in place. `zoompilot/panda` branch `c3` carries the
-restored F4 target and the submodule pointer resolves against it. The AGNOS boot image is built and
-published, and `tici_agnos.json` points at it with no placeholders left.
+**Status: published, and unflown.** `develop-tici` and `danger-unstable-tici` are on
+`zoompilot/zoompilot`, so every branch the migrations and the picker point at exists.
+`zoompilot/panda` branch `c3` carries the restored F4 target and the pinned commit resolves on the
+remote. The AGNOS boot image is built, published and verified, and `tici_agnos.json` points at it
+with no placeholders left.
 
-Nothing here has run on a physical comma three. The pieces are verified against known-good
-artifacts wherever one exists, which is not the same as having driven a car.
+Install `develop-tici` through the custom software URL in the setup flow.
+
+Nothing here has run on a physical comma three. Where a known good artifact exists the work is
+checked against it, which is not the same as having driven a car. Read
+[Still to verify on a device](#still-to-verify-on-a-device) before the first drive.
 
 ## Device names
 
