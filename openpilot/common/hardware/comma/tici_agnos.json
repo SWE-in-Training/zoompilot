@@ -56,15 +56,15 @@
   },
   {
     "name": "boot",
-    "url": "REPLACED_BY_BUILD",
-    "hash": "REPLACED_BY_BUILD",
-    "hash_raw": "REPLACED_BY_BUILD",
-    "size": "REPLACED_BY_BUILD",
+    "url": "https://github.com/zoompilot/zoompilot/releases/download/agnos-tici-boot-2/boot-5ddf0e0f76594604fe785e71e8669be246980fdfe47b31702ad54ca386561056.img.xz",
+    "hash": "5ddf0e0f76594604fe785e71e8669be246980fdfe47b31702ad54ca386561056",
+    "hash_raw": "5ddf0e0f76594604fe785e71e8669be246980fdfe47b31702ad54ca386561056",
+    "size": 47269888,
     "sparse": false,
     "full_check": true,
     "has_ab": true,
-    "ondevice_hash": "REPLACED_BY_BUILD",
-    "_comment": "Built by .github/workflows/zoompilot-agnos-tici-boot.yaml from commaai/agnos-kernel-sdm845 with comma_tici.dts restored. Not installable until this entry is filled in by that workflow."
+    "ondevice_hash": "8b287fd8e9cc2a1192c8efa78f826052cc8a8335a2430dae44b7ef55d35e68c2",
+    "_comment": "kernel c368754c26c7b9659de187addc6cccedc6cfb0a0 with comma_tici.dts restored, agnos-builder 8f7207a4f083ce3215f893a01b74613c507cc4bc, run 34095452478"
   },
   {
     "name": "system",

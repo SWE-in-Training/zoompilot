@@ -3,17 +3,12 @@
 This documents the `-tici` branches: what the comma three needs that the comma 3X and comma 4 do
 not, why each difference exists, and what is still unverified.
 
-**Status: one step short of installable.** The panda side is done: `zoompilot/panda` branch `c3`
-carries the restored F4 target, it is pushed, and the submodule pointer here resolves against it.
-What remains is the AGNOS boot image. The build workflow is on `develop` via PR #11; once that
-merges, dispatch it, paste the emitted entry into the `boot` slot of `tici_agnos.json`, and this
-branch is installable.
+**Status: complete, and unflown.** Every piece is in place. `zoompilot/panda` branch `c3` carries the
+restored F4 target and the submodule pointer resolves against it. The AGNOS boot image is built and
+published, and `tici_agnos.json` points at it with no placeholders left.
 
-Until that entry is filled in, a comma three on this branch will fail its AGNOS update rather than
-flash anything, because the placeholder is a string where `agnos.py` requires an int. Do not
-advertise the branch before then.
-
-Nothing in this document has been run on a physical comma three.
+Nothing here has run on a physical comma three. The pieces are verified against known-good
+artifacts wherever one exists, which is not the same as having driven a car.
 
 ## Device names
 
