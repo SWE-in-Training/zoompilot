@@ -10,6 +10,7 @@ import unittest
 import numpy as np
 from collections import Counter, defaultdict
 from pathlib import Path
+from openpilot.common.hardware import HARDWARE
 from openpilot.common.test import OpenpilotTestCase
 from openpilot.common.utils import tabulate
 
@@ -361,9 +362,12 @@ class TestOnroad(OpenpilotTestCase):
           diff = max(ts.values()) - min(ts.values())
           assert diff < 2, f"Cameras not synced properly: {frame_id=}, {diff=:.1f}ms, {ts=}"
 
-          # cabin camera should be staggered ~25ms from road camera
-          offset_ms = abs(timestamps[cams[2]][frame_id] - timestamps[cams[0]][frame_id]) / 1e6
-          assert 20 < offset_ms < 30, f"cabin camera stagger out of range at frame {frame_id}: {offset_ms:.1f}ms"
+          # cabin camera should be staggered ~25ms from road camera. The stagger
+          # comes from the panda's slave timer, which only the H7 pandas have; the
+          # comma three's dos is an STM32F4 with no offset to assert.
+          if HARDWARE.get_device_type() != 'tici':
+            offset_ms = abs(timestamps[cams[2]][frame_id] - timestamps[cams[0]][frame_id]) / 1e6
+            assert 20 < offset_ms < 30, f"cabin camera stagger out of range at frame {frame_id}: {offset_ms:.1f}ms"
 
   def test_camera_encoder_matches(self, subtests):
     # sanity check that the frame metadata is consistent with the encoded frames
