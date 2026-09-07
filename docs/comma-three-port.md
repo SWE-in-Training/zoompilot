@@ -124,13 +124,35 @@ channel by design.
 The bar for this port is parity with the comma 3X, not with upstream. These are equal on both, so
 they are documented rather than fixed here:
 
-- `BIG_UI` in `system/ui/lib/application.py` is read from an environment variable that nothing sets
-  on a device, so `FONT_SCALE`, the default font weight and all of `system/ui/text.py` use small-
-  screen values on a 2160x1080 panel. This affects the comma 3X identically.
+- Early comma threes shipped a BMX055 IMU, see below. Everything else that was at parity has been
+  fixed rather than documented, because only comma threes install this branch.
+
+`BIG_UI` was the exception worth fixing. It was read from an environment variable that nothing sets
+on a device, so `FONT_SCALE`, the default font weight and all of `system/ui/text.py` sized for the
+comma four's 536x240 panel on a 2160x1080 screen. It now includes the big-panel devices directly.
+The comma 3X has the same bug on its own branches; this is a candidate to upstream.
 - Early comma threes shipped a BMX055 IMU. The Python `sensord` rewrite supports only LSM6DS3, and
   the C3-validated sunnypilot branch dropped BMX055 too, so those units are no better off there.
   `openpilot/sunnypilot/system/sensord/` contains BMX055 drivers but is not wired into
   `process_config.py` and is dead code.
+
+## Effect on the comma 3X and comma 4
+
+Every change was reviewed for impact on the other two devices, because this branch is meant to
+merge back rather than diverge:
+
+- The 3X amplifier register list was verified byte-identical to the flat one it replaced, by
+  evaluating both files and comparing the expanded configs. The comma 4 has no amplifier and never
+  reaches that code.
+- `selfdrived`'s `ignored_processes` still resolves to exactly `{'mapd'}` off a comma three.
+- The AR0231 exposure scale is `1.0` for any other sensor, so brightness is unchanged.
+- `tici`, `TICI` and `-tici` gates are additive everywhere else: device map, loggerd geometry,
+  soundd, UI frame rate, offroad alerts, branch picker, branch migrations, installer.
+- AR0231 is probed first, which is the order upstream shipped for years with all three sensors. A
+  failed probe falls through to the next sensor.
+- `tici_reset.py` serves both the comma three and the 3X. The NVMe wipe is best effort and fails
+  harmlessly on a 3X, which has no such device node. This matches what upstream did.
+- The amplifier test now skips where there is no amplifier instead of raising `KeyError`.
 
 ## Still to verify on a device
 

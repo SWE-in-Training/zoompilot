@@ -32,7 +32,10 @@ MOUSE_THREAD_RATE = 140  # touch controller runs at 140Hz
 MAX_TOUCH_SLOTS = 2
 TOUCH_HISTORY_TIMEOUT = 3.0  # Seconds before touch points fade out
 
-BIG_UI = os.getenv("BIG", "0") == "1"
+# the big-panel devices are a big UI whether or not BIG is set in the environment,
+# and nothing sets it on a device, so FONT_SCALE, the default font weight and
+# system/ui/text.py were all sizing for the comma four's 536x240 panel
+BIG_UI = os.getenv("BIG", "0") == "1" or HARDWARE.get_device_type() in ('tici', 'tizi')
 ENABLE_VSYNC = os.getenv("ENABLE_VSYNC", "0") == "1"
 SHOW_FPS = os.getenv("SHOW_FPS") == "1"
 SHOW_TOUCHES = os.getenv("SHOW_TOUCHES") == "1"
