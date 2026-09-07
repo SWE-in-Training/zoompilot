@@ -33,7 +33,7 @@ from openpilot.selfdrive.modeld.fill_model_msg import fill_model_msg, fill_drivi
 from openpilot.common.file_chunker import open_file_chunked
 from openpilot.common.hardware.usb import CHESTNUT_USB_IDS
 from openpilot.selfdrive.modeld.constants import ModelConstants, Plan
-from openpilot.selfdrive.modeld.helpers import chestnut_present, chestnut_compiled, chestnut_ready, modeld_pkl_path, load_oob
+from openpilot.selfdrive.modeld.helpers import chestnut_present, chestnut_compiled, chestnut_ready, modeld_pkl_path, load_oob, check_modeld_pkl
 
 from openpilot.sunnypilot.livedelay.helpers import get_lat_delay
 from openpilot.sunnypilot.modeld_v2.modeld_base import ModelStateBase
@@ -180,7 +180,9 @@ class ModelState(ModelStateBase):
 
   def __init__(self, cam_w: int, cam_h: int, chestnut: bool):
     ModelStateBase.__init__(self)
-    jits = load_oob(open_file_chunked(modeld_pkl_path(chestnut)))
+    pkl_path = modeld_pkl_path(chestnut)
+    jits = load_oob(open_file_chunked(pkl_path))
+    check_modeld_pkl(jits, pkl_path)
     input_devices = jits['input_devices']
     self.model_device = input_devices['model']
     metadata = jits['metadata']
