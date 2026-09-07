@@ -36,7 +36,7 @@ class TestAmplifier(OpenpilotTestCase):
 
   def test_init(self):
     amp = Amplifier(debug=True)
-    r = amp.initialize_configuration()
+    r = amp.initialize_configuration(HARDWARE.get_device_type())
     assert r
     assert self._check_for_i2c_errors(False)
 
@@ -58,7 +58,7 @@ class TestAmplifier(OpenpilotTestCase):
       time.sleep(0.1)
 
       amp = Amplifier(debug=True)
-      r = amp.initialize_configuration()
+      r = amp.initialize_configuration(HARDWARE.get_device_type())
       assert r
 
       if self._check_for_i2c_errors(True):
