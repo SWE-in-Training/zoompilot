@@ -140,23 +140,33 @@ The `c3` branch of our panda fork restores the F4 target and the dos board. It b
 changed since the reference C3 branch was cut, so `dos.h` matches today's `struct board` field for
 field.
 
-Four gaps are known and none is fixed:
+Two gaps remain, both narrower than they were:
 
-1. **CAN-FD safety modes are no longer refused on a bxCAN panda.** The `#ifdef CANFD` gate that used
-   to keep `hyundai_canfd` hooks off an F4 now lives in opendbc, not panda, so restoring it here was
-   not possible without changing safety code shared by every device we ship. A dos will now accept a
-   CAN-FD safety model instead of falling back to SILENT. It still fails safe, because the rx checks
-   can never validate on a bus that cannot carry the frames, and a comma three could never drive a
-   CAN-FD car anyway. It is a lost layer of defence in depth rather than a live hazard, and it is a
-   decision to take deliberately before anyone drives a CAN-FD car on a comma three.
-2. **`enter_stop_mode()` is a no-op on F4.** The shared implementation is now all H7 registers. Sleep
-   and power-off current draw on a comma three are unmeasured.
-3. **Fan stall recovery is gone.** The shared fan driver dropped the `fan_stall_recovery` and
+1. **`enter_stop_mode()` is a no-op on F4.** The shared implementation is now all H7 registers.
+   Sleep and power-off current draw on a comma three are unmeasured.
+2. **Fan stall recovery is gone.** The shared fan driver dropped the `fan_stall_recovery` and
    `fan_max_rpm` fields the dos used, and comma's own deleted test said the comma three's fans need
    it. Exercise the fan across its range on hardware.
-4. **Panda temperature reads 0 C.** The STM32F413 has no digital temperature sensor, and its analog
-   one is unavailable while the ADC is configured for VBAT, which is how the dos has always run. A
-   stub returns 0.0, the same value the H7 driver returns with no valid measurement.
+
+Panda temperature reads 0 C, which is not a gap so much as the truth: the STM32F413 has no digital
+temperature sensor and its analog one is unavailable while the ADC is configured for VBAT, which is
+how the dos has always run.
+
+### The CAN packet size, and what it was hiding
+
+`CANPACKET_DATA_SIZE_MAX` is fixed at 64 in opendbc, which makes `CANPacket_t` 72 bytes. A bxCAN
+controller can never carry more than 8 data bytes, so on an F4 that is 56 bytes of padding per slot,
+and at upstream's ring depths it put `.bss` 66 KB past `_estack` with the stack landing inside the
+rx queue. `zoompilot/opendbc` branch `c3` sizes the packet for the controller instead, which is what
+the F4 build did before the target was deleted.
+
+The same condition restores the `CANFD` gate, so `hyundai_canfd` and `volkswagen_meb` are no longer
+compiled into a classic build at all rather than being accepted and failing safe at runtime.
+Verified in the linked binaries: those hooks are absent from the F4 and present on the H7.
+
+One thing this exposes: the host still describes packets with a CAN FD length code, and upstream
+never bounded the copy into `CANPacket_t` because both sides always agreed on its size. They no
+longer do on an F4, so `can_comms.h` now drops an over-long packet instead.
 
 ## Installing on a comma three
 
