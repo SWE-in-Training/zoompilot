@@ -94,6 +94,20 @@ paired with comma's official userspace. Kernel/userspace coupling is loose, but 
 never run anywhere.
 
 The `boot` entry in `tici_agnos.json` is a placeholder until the build workflow fills it in.
+
+**Cross-checked against a working image.** FrogPilot publishes an AGNOS 18.4 boot image that comma
+three users actually run (`FrogAi/FrogPilot-Resources`, `AGNOS/18.4`), and opgm's C3 branch ships
+it. Downloading and inspecting it confirms the approach here:
+
+- Its decompressed sha256 equals the hash embedded in its filename, which pins down what the
+  manifest's `hash`/`hash_raw` mean: sha256 of the **decompressed** image, not the `.img.xz`.
+- It carries exactly four appended DTBs, with model strings `comma tici`, `comma tizi` and
+  `comma mici`. That is the same set our Makefile line produces, and it confirms these boot images
+  are multi-device rather than per-device: restoring `comma_tici.dtb` to the build is all that is
+  needed, and the result still boots a 3X or a comma four.
+
+So the structure we are producing matches a known-good artifact. What remains unproven is our
+specific kernel commit and toolchain, not the method.
 `.github/workflows/zoompilot-agnos-tici-boot.yaml` is that workflow;
 [docs/agnos-tici-boot.md](agnos-tici-boot.md) covers what it builds, how to verify the result and
 how to recover a device that will not boot after flashing one.
