@@ -176,8 +176,9 @@ they are documented rather than fixed here:
 
 `BIG_UI` was the exception worth fixing. It was read from an environment variable that nothing sets
 on a device, so `FONT_SCALE`, the default font weight and all of `system/ui/text.py` sized for the
-comma four's 536x240 panel on a 2160x1080 screen. It now includes the big-panel devices directly.
-The comma 3X has the same bug on its own branches; this is a candidate to upstream.
+comma four's 536x240 panel on a 2160x1080 screen. It now includes the comma three directly.
+The comma 3X has the same bug, and is deliberately left alone here rather than
+restyling every existing 3X install from a comma three branch. Candidate to upstream.
 - Early comma threes shipped a BMX055 IMU. The Python `sensord` rewrite supports only LSM6DS3, and
   the C3-validated sunnypilot branch dropped BMX055 too, so those units are no better off there.
   `openpilot/sunnypilot/system/sensord/` contains BMX055 drivers but is not wired into

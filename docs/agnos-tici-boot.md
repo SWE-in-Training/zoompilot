@@ -186,12 +186,23 @@ To try an image without going through the updater, do the same thing by hand and
 slot intact:
 
 ```bash
-# on the device
-abctl --boot_slot                       # which slot is live now
-sudo dd if=boot.img of=/dev/disk/by-partlabel/boot_b   # the OTHER one
-sudo abctl --set_active 1               # 1 for _b, 0 for _a
+# on the device. Derive the inactive slot, never hardcode it: writing the slot you
+# are running from destroys the fallback this whole procedure depends on.
+live=$(abctl --boot_slot | tr -d '[:space:]')   # a or b
+case "$live" in
+  a) target=b; idx=1 ;;
+  b) target=a; idx=0 ;;
+  *) echo "could not read the live slot, stop here"; exit 1 ;;
+esac
+echo "live slot $live, writing boot_$target"
+
+sudo dd if=boot.img of=/dev/disk/by-partlabel/boot_$target
+sudo abctl --set_active $idx
 sudo reboot
 ```
+
+This is what `agnos.py` does: `get_target_slot_number()` picks the inactive slot, and the updater
+verifies the write before it ever calls `abctl --set_active`.
 
 agnos-builder's own `load_kernel.sh` dds to **both** `boot_a` and `boot_b`. Do not use it here.
 That destroys the fallback slot, which is the only thing standing between a bad kernel and a QDL
@@ -204,8 +215,13 @@ boot at all, and the usual escape hatch is worse for a comma three than for othe
 
 - **Slot fallback.** If only one slot is bad the bootloader falls back to the other after its retry
   count runs out. This is the reason for flashing the inactive slot only.
-- **QDL.** `xbl`, `xbl_config` and `abl` are never written by this workflow, so the bootloader and
-  its QDL/EDL entry survive whatever happens to `boot`. Recovery is
+- **QDL always survives, but not for the reason you might assume.** This workflow only ever
+  produces `boot`, however `tici_agnos.json` is a whole manifest: taking an AGNOS update through
+  the updater also writes comma's `xbl`, `xbl_config`, `abl`, `aop` and `devcfg` to the target
+  slot, exactly as it would on a 3X. A comma three therefore does run a bootloader newer than any
+  comma shipped for it, which is the same arrangement the third party 18.4 images already in the
+  field use. What makes QDL safe is that EDL lives in the SoC boot ROM, not in a partition, so it
+  is reachable however badly `boot` or even `xbl` is written. Recovery is
   `agnos-builder/tools/qdl flash boot <known-good boot.img>`, which is what
   `agnos-builder/flash_kernel.sh` does. Getting the device into QDL mode is documented at
   <https://flash.comma.ai>.
