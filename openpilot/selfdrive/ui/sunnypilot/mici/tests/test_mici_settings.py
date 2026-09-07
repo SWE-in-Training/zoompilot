@@ -709,11 +709,10 @@ class TestAcceleratorModelSelection:
 
 
 class TestAcceleratorLinkToggle:
-  """The models panel's auto / on / off control over the accelerator link.
+  """The models panel's on / off control over the accelerator link.
 
-  Absent means auto, which the stock index toggle cannot store, and the control
-  is hidden on a device it means nothing to: a plain comma must not grow a
-  setting for hardware it will never see.
+  On is the only enable, and the control is hidden on a device it means nothing
+  to: a plain comma must not grow a setting for hardware it will never see.
   """
 
   PARAM = "JetlinkEnabled"
@@ -743,8 +742,8 @@ class TestAcceleratorLinkToggle:
     assert self._meaningful(present=True)
 
   def test_shown_when_ready_with_the_hardware_out_of_the_car(self, params):
-    # the engine is cached, so on auto modeld will still try the link at the next
-    # ignition. this is the case the off position exists for
+    # the engine is cached and the link may be on, so modeld will still try it at
+    # the next ignition. this is the case the off position exists for
     params.remove(self.PARAM)
     assert self._meaningful(ready=True)
 
@@ -752,54 +751,59 @@ class TestAcceleratorLinkToggle:
     params.remove(self.PARAM)
     assert self._meaningful(reason="no gadget")
 
-  def test_shown_once_the_user_has_set_it(self, params):
-    params.put_bool(self.PARAM, False, block=True)
+  def test_shown_once_the_user_has_turned_it_on(self, params):
+    params.put_bool(self.PARAM, True, block=True)
     assert self._meaningful()
 
-  def test_reads_all_three_states(self, params):
-    from openpilot.selfdrive.ui.sunnypilot.mici.layouts.models import read_link_state
+  def test_hidden_when_off_with_nothing_attached(self, params):
+    params.put_bool(self.PARAM, False, block=True)
+    assert not self._meaningful()
+
+  def test_absent_reads_as_off(self, params):
+    from openpilot.selfdrive.ui.sunnypilot.mici.layouts.models import link_enabled
 
     params.remove(self.PARAM)
-    assert read_link_state() == "auto"
+    assert link_enabled() is False
     params.put_bool(self.PARAM, True, block=True)
-    assert read_link_state() == "on"
+    assert link_enabled() is True
     params.put_bool(self.PARAM, False, block=True)
-    assert read_link_state() == "off"
+    assert link_enabled() is False
 
-  def test_tap_cycles_auto_on_off_and_back(self, params):
-    from openpilot.selfdrive.ui.sunnypilot.mici.layouts.models import AcceleratorLinkToggle, LINK_STATES
+  def test_tap_toggles_on_and_off(self, params):
+    from openpilot.selfdrive.ui.sunnypilot.mici.layouts.models import AcceleratorLinkToggle
     from openpilot.system.ui.lib.application import MousePos
 
     params.remove(self.PARAM)
+    params.put("ModelRunnerTypeCache", 1)
     toggle = AcceleratorLinkToggle()
-    assert toggle.value == toggle._options[LINK_STATES.index("auto")]
+    assert not toggle._checked
     toggle._handle_mouse_release(MousePos(0, 0))
     assert params.get(self.PARAM) is True
+    assert params.get("ModelRunnerTypeCache") is None, "the link decides which modeld manager runs"
     toggle._handle_mouse_release(MousePos(0, 0))
     assert params.get(self.PARAM) is False
-    toggle._handle_mouse_release(MousePos(0, 0))
-    assert params.get(self.PARAM) is None, "auto is the absence of the param, not a third value"
 
   def test_refresh_follows_the_param(self, params):
-    from openpilot.selfdrive.ui.sunnypilot.mici.layouts.models import AcceleratorLinkToggle, LINK_STATES
+    from openpilot.selfdrive.ui.sunnypilot.mici.layouts.models import AcceleratorLinkToggle
 
     params.remove(self.PARAM)
     toggle = AcceleratorLinkToggle()
-    params.put_bool(self.PARAM, False, block=True)
+    params.put_bool(self.PARAM, True, block=True)
     toggle.refresh()
-    assert toggle.value == toggle._options[LINK_STATES.index("off")]
+    assert toggle._checked
 
   def test_link_toggle_cannot_change_runner_after_ignition(self, params):
     from unittest import mock
     from openpilot.selfdrive.ui.sunnypilot.mici.layouts.models import AcceleratorLinkToggle
 
+    params.remove(self.PARAM)
     toggle = AcceleratorLinkToggle()
-    before = params.get(self.PARAM)
     with mock.patch('openpilot.selfdrive.ui.sunnypilot.mici.layouts.models.ui_state.is_offroad', return_value=False), \
-         mock.patch('openpilot.selfdrive.ui.sunnypilot.mici.layouts.models.write_link_state') as write:
-      toggle._store('on')
+         mock.patch('openpilot.selfdrive.ui.sunnypilot.mici.layouts.models.set_link_enabled') as write:
+      toggle._store(True)
       write.assert_not_called()
-    assert params.get(self.PARAM) == before
+    assert params.get(self.PARAM) is None
+    assert not toggle._checked, "the pill must not show a state the param does not have"
 
   def test_layout_hides_the_toggle_until_it_means_something(self, params):
     from openpilot.selfdrive.ui.sunnypilot.mici.layouts.models import ModelsLayoutMici
