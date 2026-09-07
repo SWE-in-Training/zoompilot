@@ -4,16 +4,22 @@ import time
 import subprocess
 import unittest
 
+import pytest
+
 from panda import Panda
 from openpilot.common.test import OpenpilotTestCase
 from openpilot.common.hardware import HARDWARE
-from openpilot.common.hardware.comma.amplifier import Amplifier
+from openpilot.common.hardware.comma.amplifier import Amplifier, CONFIGS
 
 
 class TestAmplifier(OpenpilotTestCase):
   COMMA_HARDWARE_TEST = True
 
   def setup_method(self):
+    # the comma four has no amplifier, and there is no register set for it
+    if HARDWARE.get_device_type() not in CONFIGS:
+      pytest.skip(f"no amplifier on {HARDWARE.get_device_type()}")
+
     # clear dmesg
     subprocess.check_call("sudo dmesg -C", shell=True)
 
