@@ -219,3 +219,8 @@ Nothing here has touched a comma three. In rough order of how likely it is to bi
 4. The amplifier register set produces sane audio.
 5. Thermals and the 20 fps UI under load.
 6. Whether the device has enough RAM to build openpilot on itself.
+7. The first onroad screenshot. Several big-UI onroad renderers load textures out of `icons_mici/`
+   at comma four pixel sizes (`blind_spot_indicators.py`, `turn_signal.py`, `augmented_road_view.py`,
+   `sidebar.py`, `trips.py`). They load fine and are simply small on a 2160x1080 panel. This is
+   inherited from sunnypilot and looks the same on a comma 3X, so it is left alone rather than
+   retuned blind, but it is the obvious thing to check once someone can see the screen.
