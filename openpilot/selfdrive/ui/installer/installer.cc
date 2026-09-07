@@ -59,6 +59,11 @@ void branchMigration() {
       migrated_branch = "release-tici";
     } else if (BRANCH_STR == "master") {
       migrated_branch = "master-tici";
+    } else if (BRANCH_STR == "develop" || BRANCH_STR == "main") {
+      // a comma three is held offroad on any channel that is not tici
+      migrated_branch = "develop-tici";
+    } else if (BRANCH_STR == "danger-unstable") {
+      migrated_branch = "danger-unstable-tici";
     }
   } else if (device_type == cereal::InitData::DeviceType::TIZI) {
     if (BRANCH_STR == "release3") {
