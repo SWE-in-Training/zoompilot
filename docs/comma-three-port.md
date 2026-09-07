@@ -78,7 +78,23 @@ so nothing from it applies directly, but it is the reference for what the restor
 - **AGNOS**: a separate manifest, see below.
 - **updater**: branch shortcuts and migrations, see below.
 
-Deliberately **not** restored: the pandad USB settle grace and the `*_tizi.wav` sound overrides,
+The **pandad USB settle** was on this list and should not have been. It was read as the 60 second
+grace period alone, which does look like it has nothing left to attach to. The part that matters is
+the restructure around it: upstream's flash and connect loop resets the internal panda on every
+pass and never sleeps, which is fine for an H7 that is addressable again milliseconds later over
+SPI, and wrong for a dos that has to re-enumerate on USB. Left alone it lists the panda while it is
+still coming up, puts a working panda into DFU on the next pass, reflashes its bootstub on the one
+after, and never starts pandad. `pandad.py` now waits after a reset on a USB panda, and
+`reset_internal_panda`/`recover_internal_panda` hold RST_N and BOOT0 for the widths the last comma
+three validated release used instead of the 10 ms an H7 needs.
+
+An **aux panda has nowhere to live**. `sync-20251218-tici` zeroed `ignition_line_pkt` on a dos when
+a red panda was present, because a harness box with no harness connector gives the dos false
+ignition. pandad has been single panda since `96d1b876bb` and we pass one serial, so there is
+nothing to restore, but a comma three with a red panda in a harness box is not a supported setup on
+this branch and `check_panda_support()` will take whichever panda answers `is_internal()` first.
+
+Deliberately **not** restored: the `*_tizi.wav` sound overrides,
 both of which upstream removed for unrelated reasons and which no longer have anything to attach
 to; and the magnetometer, whose `magnetometer` service no longer exists in `cereal/services.py`
 and which nothing consumes.
@@ -225,6 +241,22 @@ merge back rather than diverge:
 - `tici_reset.py` serves both the comma three and the 3X. The NVMe wipe is best effort and fails
   harmlessly on a 3X, which has no such device node. This matches what upstream did.
 - The amplifier test now skips where there is no amplifier instead of raising `KeyError`.
+
+## Static analysis
+
+MISRA runs against the F4 target now; it never had. The F4 line in
+`panda/tests/misra/test_misra.sh` passed only `board/stm32f4/inc/`, but `core_cm4.h` takes the
+CMSIS headers from `board/stm32h7/inc/` through the compiler's `CPPPATH`, so every `__disable_irq`
+and register accessor read as an implicit declaration: 49 of 51 findings, hiding the real ones.
+
+With that fixed, three findings were ours and are gone (a 10.6 essential type widening in
+`comms_can_write`, and 8.5 twice from the F4 block in `drivers.h` re-declaring `cans[]`,
+`process_can` and `can_init`). Eight advisory findings remain on F4, all 17.3 and 8.7 in
+declaration headers, none of them behavioural. The H7 target is clean, and so is unmodified
+`sunnypilot/panda` master, which is the control that says the rest is attributable to us.
+
+Run it with comma's pinned cppcheck (`cppcheck @ git+https://github.com/commaai/dependencies.git@release-cppcheck`),
+`CPPCHECK_DIR` pointed at its `install` directory and `PYTHONPATH` at `opendbc_repo`.
 
 ## Still to verify on a device
 
