@@ -1,11 +1,17 @@
 Import('env', 'arch', 'common', 'messaging')
 
 if arch != "Darwin":
-  import libusb
-
   pandad_env = env.Clone()
-  pandad_env['CPPPATH'] += [libusb.INCLUDE_DIR]
-  pandad_env['LIBPATH'] += [libusb.LIB_DIR]
+
+  # comma-deps-libusb is a tools extra, and a device installs no python
+  # dependencies at build time, so fall back to the system libusb the way
+  # pandad did before the USB transport was removed.
+  try:
+    import libusb
+    pandad_env['CPPPATH'] += [libusb.INCLUDE_DIR]
+    pandad_env['LIBPATH'] += [libusb.LIB_DIR]
+  except ImportError:
+    pass
 
   libs = [common, messaging, 'pthread', 'usb-1.0']
   panda = pandad_env.Library('panda', ['panda.cc', 'spi.cc', 'usb.cc'])

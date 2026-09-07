@@ -10,17 +10,38 @@
 #include "openpilot/cereal/messaging/messaging.h"
 #include "common/swaglog.h"
 #include "common/util.h"
+#include "common/hardware/hw.h"
 
 const bool PANDAD_MAXOUT = getenv("PANDAD_MAXOUT") != nullptr;
 
+// The comma three's internal panda is on USB. The 3X and comma four are on SPI,
+// and try SPI first so they behave exactly as they did before USB came back.
+static bool panda_usb_first() {
+  return Hardware::get_device_type() == cereal::InitData::DeviceType::TICI;
+}
+
 Panda::Panda(std::string serial) {
-  // try USB first, then SPI
-  try {
-    handle = std::make_unique<PandaUsbHandle>(serial);
-    LOGW("connected to %s over USB", serial.c_str());
-  } catch (std::exception &e) {
-    handle = std::make_unique<PandaSpiHandle>(serial);
-    LOGW("connected to %s over SPI", serial.c_str());
+  std::string usb_err = "not tried", spi_err = "not tried";
+
+  auto try_usb = [&]() {
+    try {
+      handle = std::make_unique<PandaUsbHandle>(serial);
+      LOGW("connected to %s over USB", serial.c_str());
+      return true;
+    } catch (const std::exception &e) { usb_err = e.what(); return false; }
+  };
+  auto try_spi = [&]() {
+    try {
+      handle = std::make_unique<PandaSpiHandle>(serial);
+      LOGW("connected to %s over SPI", serial.c_str());
+      return true;
+    } catch (const std::exception &e) { spi_err = e.what(); return false; }
+  };
+
+  const bool ok = panda_usb_first() ? (try_usb() || try_spi()) : (try_spi() || try_usb());
+  if (!ok) {
+    LOGE("failed to connect to panda '%s'. USB: %s. SPI: %s", serial.c_str(), usb_err.c_str(), spi_err.c_str());
+    throw std::runtime_error("failed to connect to panda over USB or SPI");
   }
 
   hw_type = get_hw_type();
@@ -40,9 +61,12 @@ std::string Panda::hw_serial() {
 }
 
 std::vector<std::string> Panda::list() {
-  std::vector<std::string> serials = PandaUsbHandle::list();
+  // the native transport first, so an external USB panda cannot displace the
+  // internal one on a device whose internal panda is on SPI
+  std::vector<std::string> serials = panda_usb_first() ? PandaUsbHandle::list() : PandaSpiHandle::list();
+  const auto others = panda_usb_first() ? PandaSpiHandle::list() : PandaUsbHandle::list();
 
-  for (const auto &s : PandaSpiHandle::list()) {
+  for (const auto &s : others) {
     if (std::find(serials.begin(), serials.end(), s) == serials.end()) {
       serials.push_back(s);
     }
