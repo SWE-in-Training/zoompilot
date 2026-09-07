@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 from collections.abc import Callable
+import ctypes
+from functools import cached_property
 import os
 os.environ['GMMU'] = '0' # for chestnut fast loading, noop for qcom
+from tinygrad.device import Device
+import usb1
+import struct
 import threading
 import time
 import numpy as np
@@ -26,8 +31,9 @@ from openpilot.selfdrive.modeld.parse_model_outputs import Parser
 from openpilot.selfdrive.modeld.compile_modeld import make_input_queues, nv12_copy_size, MODELD_INPUTS
 from openpilot.selfdrive.modeld.fill_model_msg import fill_model_msg, fill_driving_model_data, fill_pose_msg, PublishState
 from openpilot.common.file_chunker import open_file_chunked
+from openpilot.common.hardware.usb import CHESTNUT_USB_IDS
 from openpilot.selfdrive.modeld.constants import ModelConstants, Plan
-from openpilot.selfdrive.modeld.helpers import modeld_pkl_path, load_oob, check_modeld_pkl
+from openpilot.selfdrive.modeld.helpers import chestnut_present, chestnut_compiled, chestnut_ready, modeld_pkl_path, load_oob, check_modeld_pkl
 
 from openpilot.sunnypilot import accelerators
 from openpilot.sunnypilot.livedelay.helpers import get_lat_delay
@@ -68,6 +74,96 @@ def get_action_from_model(model_output: dict[str, np.ndarray], prev_action: log.
   return log.ModelDataV2.Action(desiredCurvature=float(desired_curvature),
                                 desiredAcceleration=float(desired_accel),
                                 shouldStop=bool(stop))
+
+
+class ChestnutState:
+  # only modeld can access chestnut
+  def __init__(self, pm: PubMaster, big: bool):
+    self.pm = pm
+    self.big = big
+    self.valid = True
+    self.sends = 0
+    self.metrics = {}
+    self._asm_usb = None
+
+  def _close_asm_usb(self) -> None:
+    if self._asm_usb is not None:
+      self._asm_usb.close()
+      self._asm_usb = None
+
+  def _open_asm_usb(self):
+    context = usb1.USBContext()
+    for vendor_id, product_id in CHESTNUT_USB_IDS:
+      if (handle := context.openByVendorIDAndProductID(vendor_id, product_id, skip_on_error=True)) is not None:
+        return handle
+    context.close()
+
+  def _read_ina(self) -> tuple[int, int, bool]:
+    if "AMD" in Device._opened_devices and self._asm_usb is None:
+      try:
+        raw = Device["AMD"].iface.pci_dev.usb.usb.control_read(0xC0, 5)
+        return struct.unpack('<Hh?', bytes(raw))
+      except Exception:
+        pass
+    if self._asm_usb is None:
+      self._asm_usb = self._open_asm_usb()
+    if self._asm_usb is None:
+      raise usb1.USBErrorNoDevice
+    try:
+      raw = self._asm_usb.controlRead(0xC0, 0xC0, 0, 0, 5, timeout=100)
+    except usb1.USBError:
+      self._close_asm_usb()
+      raise
+    return struct.unpack('<Hh?', bytes(raw))
+
+  @cached_property
+  def power_limit(self) -> int:
+    smu = Device["AMD"].iface.dev_impl.smu
+    return smu._send_msg(smu.smu_mod.PPSMC_MSG_GetPptLimit, 0, read_back_arg=True, timeout=100)
+
+  def send(self) -> None:
+    msg = messaging.new_message('chestnutState')
+    state = msg.chestnutState
+    self.sends += 1
+    if self.big and "AMD" in Device._opened_devices and self.sends % 100 == 1:
+      try:
+        smu = Device["AMD"].iface.dev_impl.smu
+        metrics_t = smu.smu_mod.SmuMetricsExternal_t
+        smu._send_msg(smu.smu_mod.PPSMC_MSG_TransferTableSmu2Dram, smu.smu_mod.TABLE_SMU_METRICS, timeout=100)
+        metrics_buf = bytearray(smu.adev.vram.view(smu.driver_table_paddr, ctypes.sizeof(metrics_t))[:])
+        metrics = metrics_t.from_buffer(metrics_buf).SmuMetrics
+        self.metrics = {'tempC': metrics.AvgTemperature[smu.smu_mod.TEMP_HOTSPOT],
+                        'memoryTempC': metrics.AvgTemperature[smu.smu_mod.TEMP_MEM],
+                        'powerDrawW': metrics.AverageSocketPower,
+                        'powerLimitW': self.power_limit,
+                        'gpuUsagePercent': metrics.AverageGfxActivity,
+                        'gpuClockMhz': metrics.AverageGfxclkFrequencyPostDs,
+                        'fanSpeedRpm': metrics.AvgFanRpm}
+        self.valid = True
+      except Exception:
+        if self.valid:
+          cloudlog.exception("chestnut state read failed")
+        self.valid = False
+        self.metrics.clear()
+    if self.big:
+      for k, v in self.metrics.items():
+        setattr(state, k, v)
+
+    asm_valid = False
+    try:
+      # ASM runs on USB-C power, these still read without a gpu
+      state.supplyVoltage, state.supplyCurrent, state.supplyFault = self._read_ina()
+      asm_valid = True
+    except Exception:
+      pass
+    if "AMD" in Device._opened_devices:
+      try:
+        state.pcieLtssm = Device["AMD"].iface.pci_dev.usb.read(0xB450, 1)[0]
+      except Exception:
+        pass
+
+    msg.valid = asm_valid and (not self.big or self.valid)
+    self.pm.send('chestnutState', msg)
 
 
 class FrameMeta:
@@ -146,29 +242,30 @@ class ModelState(ModelStateBase):
     self.prev_desire[:] = 0
 
 
-def _boottime_ns() -> int:
-  """The clock camerad stamps timestamp_eof with (nanos_since_boot)."""
-  clock = getattr(time, 'CLOCK_BOOTTIME', None)
-  return time.clock_gettime_ns(clock) if clock is not None else time.monotonic_ns()
-
-
 def main(demo=False):
   cloudlog.warning("modeld init")
 
-  # Whatever runs the large model here: comma's chestnut board, an attached
-  # Jetson, nothing. See sunnypilot/accelerators/.
-  accel = accelerators.active()
-  # Fitted is not the same as ready to load on. A chestnut can enumerate before
-  # its PCIe link is trained and before 12V is up; a jetlink can be mid-attach.
-  # prepare() is where a backend waits for the real thing and may still say no,
-  # because active() has to stay cheap enough for the UI to call it.
-  CHESTNUT = accel is not None and accelerators.prepare(accel)
+  chestnut_available = chestnut_present() and chestnut_compiled()
+  CHESTNUT = False
+  if chestnut_available:
+    poller = messaging.Poller()
+    sock = messaging.sub_sock("chestnutState", poller=poller, conflate=True)
+    deadline = time.monotonic() + 4. / SERVICE_LIST['deviceState'].frequency
+    while not CHESTNUT and (remaining := deadline - time.monotonic()) > 0.:
+      if not poller.poll(round(remaining * 1000)):
+        break
+      msg = messaging.recv_one_or_none(sock)
+      CHESTNUT = msg is not None and msg.valid and chestnut_ready(msg.chestnutState)
+  if CHESTNUT:
+    os.environ['HCQDEV_WAIT_TIMEOUT_MS'] = '3000'
   params = Params()
   params.put_bool("ChestnutLoading", CHESTNUT)
-  if accel is not None and not CHESTNUT:
+  if chestnut_available and not CHESTNUT:
     params.put_bool("ChestnutActive", False)
   else:
     params.remove("ChestnutActive")
+  # Here and not later: prepare() inits tinygrad's device thread, which must exist before the process goes realtime or it inherits FIFO 54 on core 7.
+  JETLINK = not CHESTNUT and accelerators.ready() and accelerators.prepare()
 
   config_realtime_process(7, 54)
 
@@ -197,49 +294,39 @@ def main(demo=False):
 
   st = time.monotonic()
   cloudlog.warning("loading model")
-  # The small model first, on this thread: it is the fallback either way, and
-  # a backend may borrow its warp rather than load the same pkl again from a
-  # thread this one would be racing on the same device.
-  small_model = ModelState(vipc_client_main.width, vipc_client_main.height, False)
   model = None
   if CHESTNUT:
     big_model = None
-    abandoned = False
-    handoff = threading.Lock()
     def load_big():
       nonlocal big_model
       try:
-        m = accel.make_model_state(vipc_client_main.width, vipc_client_main.height, small_model)
+        m = ModelState(vipc_client_main.width, vipc_client_main.height, True)
         m.warmup()
-        with handoff:
-          if abandoned:
-            # Past BIG_MODEL_TIMEOUT and modeld is already driving on the small
-            # model. Let go of the hardware rather than hold it all drive.
-            close = getattr(m, 'close', None)
-            if close is not None:
-              close()
-          else:
-            big_model = m
+        big_model = m
       except Exception:
         cloudlog.exception("big model load failed")
     loader = threading.Thread(target=load_big, daemon=True)
     loader.start()
     loader.join(BIG_MODEL_TIMEOUT)
-    with handoff:
-      abandoned = True
-      model = big_model
+    model = big_model
     if model is None:
       params.put_bool("ChestnutModelError", True)
-    # A state still bringing its accelerator up owns ChestnutActive from here:
-    # true at the swap, false if it drops. See sunnypilot/accelerators/.
-    if not getattr(model, 'loading', False):
-      params.put_bool("ChestnutActive", model is not None)
+    params.put_bool("ChestnutActive", model is not None)
     if model is not None:
       params.remove("ChestnutModelError")
+  elif JETLINK:
+    small_model = ModelState(vipc_client_main.width, vipc_client_main.height, False)
+    try:
+      model = accelerators.make_model_state(vipc_client_main.width, vipc_client_main.height, small_model)
+    except Exception:
+      cloudlog.exception("jetlink load failed")
+      model = None
 
+  if not JETLINK:
+    small_model = ModelState(vipc_client_main.width, vipc_client_main.height, False) if model is None or CHESTNUT else None
   if model is None:
     model = small_model
-  params.put_bool("ChestnutLoading", bool(getattr(model, 'loading', False)))
+  params.put_bool("ChestnutLoading", False)
   assert model is not None
   cloudlog.warning(f"models loaded in {time.monotonic() - st:.1f}s, modeld starting")
 
@@ -250,15 +337,12 @@ def main(demo=False):
 
   publish_state = PublishState()
   params = Params()
-  chestnut_state = accel.make_health_publisher(pm, model) if CHESTNUT else None
+  chestnut_state = ChestnutState(pm, model.chestnut) if CHESTNUT else None
+  if JETLINK:
+    chestnut_state = accelerators.make_status_publisher(pm, model)
 
   # setup filter to track dropped frames
   frame_dropped_filter = FirstOrderFilter(0., 10., 1. / ModelConstants.MODEL_RUN_FREQ)
-  # How old a frame actually is by the time its output is published, which is
-  # what frame_delay above is guessing at. Same time base as timestamp_eof
-  # (camerad stamps it with nanos_since_boot).
-  frame_age_filter = FirstOrderFilter(DT_MDL, 2.0, 1. / ModelConstants.MODEL_RUN_FREQ)
-  frame_age_worst = 0.
   frame_id = 0
   last_vipc_frame_id = 0
   run_count = 0
@@ -353,14 +437,6 @@ def main(demo=False):
 
     bufs = {name: buf_extra if 'big' in name else buf_main for name in model.vision_input_names}
     transforms = {name: model_transform_extra if 'big' in name else model_transform_main for name in model.vision_input_names}
-    # A constant, and the same one for every runner: the small model, a
-    # chestnut and a Jetson all get 50 ms. Nothing here branches on which is
-    # running, and nothing derives it from modelExecutionTime, which is only
-    # ever logged. The runners differ by their execution time, so an
-    # accelerator slower than the small model is uncompensated by exactly that
-    # difference, on every frame, as a bias rather than as noise. Measured
-    # below and reported; not yet fed back, because action_t steers the car and
-    # changing it wants a drive's worth of numbers first. See frame_age_filter.
     frame_delay = DT_MDL # compensate for time passed since the frame was captured: current_time - timestamp_eof is 50ms on average
     action_delay = DT_MDL / 2 # middle of the interval between model output (current state) and next frame (expected state)
     lat_action_t = lat_delay + frame_delay + action_delay
@@ -377,6 +453,10 @@ def main(demo=False):
                        run_count % round(ModelConstants.MODEL_RUN_FREQ / SERVICE_LIST['chestnutState'].frequency) == 0)
       model_output = model.run(bufs, transforms, inputs, chestnut_state.send if send_chestnut else None)
     except Exception:
+      # The joining state owns its own demotion, and a small-model fault is fatal as on stock.
+      # Without this the handler below would write ChestnutActive=False and orphan its threads and open link.
+      if JETLINK:
+        raise
       if not params.get_bool("ChestnutActive"):
         raise
       # fallback to small model
@@ -410,6 +490,8 @@ def main(demo=False):
       lane_change_prob = l_lane_change_prob + r_lane_change_prob
       mdv2sp_send = messaging.new_message('modelDataV2SP')
       mdv2sp_send.modelDataV2SP.bigModelAvailable = getattr(model, 'big_model_available', False)
+      mdv2sp_send.modelDataV2SP.acceleratorState = getattr(model, 'big_model_state', 'none')
+      mdv2sp_send.modelDataV2SP.acceleratorName = 'jetlink' if JETLINK else ''
       left_edge, right_edge = RELC.update_and_fill(modelv2_send.modelV2, mdv2sp_send.modelDataV2SP, v_ego)
       DH.update(sm['carState'], sm['carControl'].latActive, lane_change_prob, left_edge, right_edge)
       modelv2_send.modelV2.meta.laneChangeState = DH.lane_change_state
@@ -422,22 +504,6 @@ def main(demo=False):
       pm.send('drivingModelData', drivingdata_send)
       pm.send('cameraOdometry', posenet_send)
       pm.send('modelDataV2SP', mdv2sp_send)
-
-      # What frame_delay should have been for this frame. Reported rather than
-      # used: it is an input to action_t, which is computed before the model
-      # runs, so feeding it back means predicting the next frame's age from
-      # this one's - defensible, but it moves the lateral and longitudinal
-      # targets for every runner including the plain small model, and that
-      # wants measurements from a real drive before anyone flips it on.
-      frame_age = (_boottime_ns() - meta_main.timestamp_eof) * 1e-9
-      if 0. < frame_age < 1.:
-        frame_age_filter.update(frame_age)
-        frame_age_worst = max(frame_age_worst, frame_age)
-      if run_count % 400 == 0:
-        cloudlog.warning("modeld: frame age %.1f ms mean, %.1f worst, frame_delay %.1f ms, exec %.1f ms, big %s",
-                         frame_age_filter.x * 1e3, frame_age_worst * 1e3, DT_MDL * 1e3,
-                         model_execution_time * 1e3, model.chestnut)
-        frame_age_worst = 0.
     last_vipc_frame_id = meta_main.frame_id
 
 if __name__ == "__main__":
