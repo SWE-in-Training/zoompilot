@@ -94,6 +94,9 @@ paired with comma's official userspace. Kernel/userspace coupling is loose, but 
 never run anywhere.
 
 The `boot` entry in `tici_agnos.json` is a placeholder until the build workflow fills it in.
+`.github/workflows/zoompilot-agnos-tici-boot.yaml` is that workflow;
+[docs/agnos-tici-boot.md](agnos-tici-boot.md) covers what it builds, how to verify the result and
+how to recover a device that will not boot after flashing one.
 
 ### 2. panda firmware and pandad USB
 
