@@ -1,0 +1,147 @@
+# zoompilot on the comma three
+
+This documents the `-tici` branches: what the comma three needs that the comma 3X and comma 4 do
+not, why each difference exists, and what is still unverified.
+
+**Status: not yet installable.** Two hard dependencies are outstanding, both tracked below. Nothing
+in this document has been run on a physical comma three.
+
+## Device names
+
+comma uses codenames throughout the codebase, and they are not obvious:
+
+| codename | product | internal panda | road cameras | display |
+|---|---|---|---|---|
+| `tici` | comma three | dos, STM32F413, **USB** | AR0231 | 2160x1080 |
+| `tizi` | comma 3X | tres, STM32H7, SPI | OX03C10 | 2160x1080 |
+| `mici` | comma four | cuatro, STM32H7, SPI | OS04C10 | 536x240 |
+
+All three are Snapdragon 845 with an Adreno 630, which is why so much of this port is small. There
+is no SoC, GPU, tinygrad-backend or userspace split to recreate. `HardwareComma` in
+`openpilot/common/hardware/comma/hardware.py` covers all three.
+
+The comma 4 additionally has a "chestnut" accelerator, but it falls back to the same `qcom` model
+path the comma three uses whenever chestnut is not active, so that path is well maintained rather
+than legacy.
+
+## What upstream removed
+
+comma dropped the comma three over three PRs in August 2025 and then refactored on top of the gap,
+so a plain revert is not possible. The removals that matter:
+
+| what | upstream commit | effect on a comma three |
+|---|---|---|
+| `tici` dropped from the C++ device map | `3b4077d31be58eba4208ae4aa480b499e928cf49` (#38201) | `assert()` fires, so **every native process aborts** |
+| AR0231 camera driver | `1d8dc8a69a188285e65595d83224e54d497178dc` (#36070) | no cameras at all |
+| tici-specific code | `3e2549f2b8675ce482200e06855857122f3583e3` (#36078) | amplifier, NVMe alert, IRQ affinity, exposure scale |
+| pandad USB transport | `96d1b876bbd7441cac08bab842aded6729ae1c6d` (#37217) | cannot reach the panda, which is on USB |
+| panda F4 target | panda `1ce986f7` (#2259) | no firmware exists for a dos panda |
+| `comma_tici.dts` | agnos-kernel-sdm845 `b90695f101ba` | AGNOS 13+ has no device tree, so it will not boot |
+
+sunnypilot's own answer is a frozen branch, `sync-20251218-tici`, which is sunnypilot master at
+2025-12-18 with the first three reverted. It predates the `openpilot/` restructure by 1616 commits,
+so nothing from it applies directly, but it is the reference for what the restored code should say.
+
+## What this branch restores
+
+- **`camerad`**: the AR0231 driver, restored as it was. `SensorInfo` has not changed since the
+  removal, so the driver needed no adaptation. All three cameras on a comma three are AR0231, so
+  this one driver covers the whole camera stack. Probed first, as upstream had it.
+- **`hardware.h`**: `tici` back in the device map. Nothing else runs until this is present.
+- **amplifier**: the per-device split is back. The comma three is mono and drives the right speaker
+  with a different EQ; the 3X is stereo. Both configs were verified byte-identical to the
+  pre-removal upstream ones by evaluating both files and comparing the expanded register lists.
+- **`set_ir_power`**: guards `tici` again. The early return covered tici and tizi before removal;
+  restoring only tizi left the comma three writing to LED sysfs nodes it does not have.
+- **NVMe**: the storage-missing offroad alert, and loggerd added to `ignored_processes`, because
+  some comma threes drop their NVMe mid-drive and crash loggerd on write. Factory reset wipes it.
+- **IRQ affinity**: the comma three's pandas are on USB, so `xhci-hcd:usb1`/`usb3` get pinned the
+  way `spi_geni` is on the other devices.
+- **UI**: AR0231 reports exposure on a different scale, so auto-brightness needs a 6x factor; the
+  UI runs at 20 fps as on the 3X; alert volume uses the 3X calibration.
+- **AGNOS**: a separate manifest, see below.
+- **updater**: branch shortcuts and migrations, see below.
+
+Deliberately **not** restored: the pandad USB settle grace and the `*_tizi.wav` sound overrides,
+both of which upstream removed for unrelated reasons and which no longer have anything to attach
+to; and the magnetometer, whose `magnetometer` service no longer exists in `cereal/services.py`
+and which nothing consumes.
+
+## Outstanding dependencies
+
+### 1. AGNOS boot image
+
+comma deleted `comma_tici.dts` from the AGNOS kernel on 2025-08-26. **AGNOS 12.8 is the last
+release that boots a comma three**; this branch pins 19.7.
+
+Only the `boot` partition is affected. `xbl`, `xbl_config`, `abl`, `aop`, `devcfg` and `system` are
+shared across all three devices and come from comma unchanged, so `openpilot/common/hardware/comma/tici_agnos.json`
+is comma's official 19.7 manifest with a different `boot` entry. `AGNOS_VERSION` stays a single
+value because `/VERSION` is written by the shared system image. Manifest selection reads
+`/sys/firmware/devicetree/base/model`, so it works before anything else is up
+(`launch_chffrplus.sh`, `updated.py`, `agnos.py`, `tools/op.sh`).
+
+Restoring the device tree is small: the 146-line `.dts` plus one line in the qcom `Makefile`. The
+per-device DTS layer has not drifted (the 3X's DTS differs by one `qcom,msm-id` entry between the
+removal commit and kernel master today), and the tici DTS's only includes and its `rpr0521` light
+sensor all still exist, so it is expected to build.
+
+**Caveat that must not be lost:** agnos-builder's public master last bumped its kernel in May 2026,
+while the kernel repo has commits through September 2026 and openpilot pins AGNOS 19.7 from
+2026-09-01. comma builds 19.7 from something not fully public, so **our image cannot be
+bit-identical to comma's**. What we ship is the AGNOS kernel at a pinned commit plus the tici DTB,
+paired with comma's official userspace. Kernel/userspace coupling is loose, but this pairing has
+never run anywhere.
+
+The `boot` entry in `tici_agnos.json` is a placeholder until the build workflow fills it in.
+
+### 2. panda firmware and pandad USB
+
+The comma three's internal panda is a "dos", an STM32F413 talking bxCAN over **USB**. The 3X and
+comma 4 use STM32H7 pandas over SPI. Upstream deleted the entire F4 target from panda and the USB
+transport from pandad, so on this tree a comma three can neither flash nor talk to its panda.
+
+Both are being restored. This is safety-critical firmware that has never been run on a car in this
+form; treat the first drive accordingly.
+
+## Installing on a comma three
+
+The branch **must** end in `-tici`. `openpilot/common/version.py` derives `channel_type` from that
+suffix, and `hardwared.py` refuses to go onroad on a comma three whose channel is not `tici`,
+showing `Offroad_TiciSupport`. The branch picker also hides every branch without the suffix, so a
+device on the wrong branch cannot fix itself from the screen. `SP_BRANCH_MIGRATIONS` therefore maps
+`develop`, `main` and `danger-unstable` to their `-tici` equivalents.
+
+Install `develop-tici` via the custom software URL in the setup flow.
+
+Do **not** put a comma three on `main`. That branch is prebuilt, and the driving model pkl is
+compiled for a single camera resolution chosen by the machine that built it. A source build on the
+device itself picks the correct 1928x1208 model automatically, so the comma three is a source
+channel by design.
+
+## Known limitations, and parity with the comma 3X
+
+The bar for this port is parity with the comma 3X, not with upstream. These are equal on both, so
+they are documented rather than fixed here:
+
+- `BIG_UI` in `system/ui/lib/application.py` is read from an environment variable that nothing sets
+  on a device, so `FONT_SCALE`, the default font weight and all of `system/ui/text.py` use small-
+  screen values on a 2160x1080 panel. This affects the comma 3X identically.
+- Early comma threes shipped a BMX055 IMU. The Python `sensord` rewrite supports only LSM6DS3, and
+  the C3-validated sunnypilot branch dropped BMX055 too, so those units are no better off there.
+  `openpilot/sunnypilot/system/sensord/` contains BMX055 drivers but is not wired into
+  `process_config.py` and is dead code.
+
+## Still to verify on a device
+
+Nothing here has touched a comma three. In rough order of how likely it is to bite:
+
+1. The AGNOS boot image boots at all. A bad boot partition bricks the device until it is reflashed
+   over USB.
+2. The panda flashes, enumerates over USB, and passes safety checks.
+3. camerad brings up three AR0231s. The BPS path gained gamma and linearization LUT programming
+   and a new black-level knee calculation since the AR0231 was removed, and the AR0231's LUTs have
+   never been exercised against it, so image quality needs a look even if frames arrive.
+4. The amplifier register set produces sane audio.
+5. Thermals and the 20 fps UI under load.
+6. Whether the device has enough RAM to build openpilot on itself.
