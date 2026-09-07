@@ -85,7 +85,9 @@ release that boots a comma three**; this branch pins 19.7.
 
 Only the `boot` partition is affected. `xbl`, `xbl_config`, `abl`, `aop`, `devcfg` and `system` are
 shared across all three devices and come from comma unchanged, so `openpilot/common/hardware/comma/tici_agnos.json`
-is comma's official 19.7 manifest with a different `boot` entry. `AGNOS_VERSION` stays a single
+is comma's official 19.7 manifest with a different `boot` entry **and 12.8's `abl`**. `abl` is the
+one bootloader partition that is device specific: a newer one rejects the comma three outright with
+`Unsupported firmware detected` before openpilot ever starts. See `docs/agnos-tici-boot.md`. `AGNOS_VERSION` stays a single
 value because `/VERSION` is written by the shared system image. Manifest selection reads
 `/sys/firmware/devicetree/base/model`, so it works before anything else is up
 (`launch_chffrplus.sh`, `updated.py`, `agnos.py`, `tools/op.sh`).

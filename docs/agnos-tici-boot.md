@@ -208,6 +208,25 @@ agnos-builder's own `load_kernel.sh` dds to **both** `boot_a` and `boot_b`. Do n
 That destroys the fallback slot, which is the only thing standing between a bad kernel and a QDL
 session.
 
+## Which partitions come from where
+
+This is the part that is easy to get wrong, and getting it wrong looks like
+`Unsupported firmware detected` on a black screen at boot, before openpilot runs at all.
+
+| partition | source | why |
+|---|---|---|
+| `xbl`, `xbl_config`, `aop`, `devcfg` | comma, current AGNOS | byte identical between 18.4 and 19.7, not device specific |
+| `abl` | **comma, AGNOS 12.8** | the last bootloader comma shipped for the comma three. A newer `abl` rejects the board |
+| `boot` | **ours** | comma's kernel has no `comma_tici.dtb` from AGNOS 13 on |
+| `system` | comma, current AGNOS | the rootfs, shared across devices |
+
+Both field validated comma three forks, sunnypilot's `sync-20251218-tici` and opgm's `master-c3`,
+independently pin 12.8's `abl` alongside a much newer everything else. That combination looked like
+an unexplained hybrid at first and it is not: `abl` is the one bootloader partition that is device
+specific, and it is the piece that decides whether the board is allowed to boot at all.
+
+If you ever bump the AGNOS version here, carry `abl` forward unchanged.
+
 ## Recovery
 
 Flashing a bad boot partition does not brick the device permanently, but it can leave it unable to
