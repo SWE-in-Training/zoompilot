@@ -153,10 +153,12 @@ def main():
   summary = {}
   for label, subset in [('all', rows), ('big', [r for r in rows if r[2]]), ('small', [r for r in rows if not r[2]])]:
     if subset:
-      values = np.asarray(subset)
+      # the state column is text, so pick the numeric columns before numpy sees the rows
+      values = np.asarray([row[:7] for row in subset], dtype=float)
       summary[label] = {'frames': len(subset), 'exec_p50_p99_p999_max_ms': np.percentile(values[:, 4], [50, 99, 99.9, 100]).tolist(),
                         'over_50ms': int((values[:, 4] > 50).sum()), 'max_drop_pct': float(values[:, 5].max()),
-                        'lagging_frames': int((values[:, 5] > 1).sum()), 'invalid_frames': int((values[:, 3] == 0).sum())}
+                        'lagging_frames': int((values[:, 5] > 1).sum()), 'invalid_frames': int((values[:, 3] == 0).sum()),
+                        'states': sorted({row[7] for row in subset})}
   (args.output / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
   print(json.dumps(summary, indent=2), flush=True)
   if not rows or (not args.small and not any(row[2] for row in rows)):
