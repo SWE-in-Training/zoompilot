@@ -704,11 +704,12 @@ class TestAcceleratorLinkToggle:
   PARAM = "JetlinkEnabled"
 
   @staticmethod
-  def _accelerators(present=False, ready=False, reason=None):
+  def _accelerators(present=False, ready=False, reason=None, installed=False):
     from contextlib import ExitStack
     from unittest import mock
 
     stack = ExitStack()
+    stack.enter_context(mock.patch("openpilot.sunnypilot.accelerators.installed", return_value=installed))
     stack.enter_context(mock.patch("openpilot.sunnypilot.accelerators.present", return_value=present))
     stack.enter_context(mock.patch("openpilot.sunnypilot.accelerators.ready", return_value=ready))
     stack.enter_context(mock.patch("openpilot.sunnypilot.accelerators.unavailable_reason", return_value=reason))
@@ -726,6 +727,29 @@ class TestAcceleratorLinkToggle:
   def test_shown_when_an_accelerator_is_attached(self, params):
     params.remove(self.PARAM)
     assert self._meaningful(present=True)
+
+  def test_shown_wherever_the_package_is_installed(self, params):
+    # with the link off there is no gadget for a Jetson to enumerate, so present()
+    # alone would hide the toggle that turns the link on
+    params.remove(self.PARAM)
+    assert self._meaningful(installed=True)
+
+  def test_refresh_says_what_is_on_the_port(self, params):
+    from unittest import mock
+    from openpilot.selfdrive.ui.sunnypilot.mici.layouts.models import AcceleratorLinkToggle
+
+    params.remove(self.PARAM)
+    link = "openpilot.selfdrive.ui.sunnypilot.accelerator_link"
+    toggle = AcceleratorLinkToggle()
+    with self._accelerators(installed=True), mock.patch(f"{link}.read", return_value="1"):
+      toggle.refresh()
+      assert toggle.get_value() == "a device is on the usb port"
+    with self._accelerators(installed=True, present=True):
+      toggle.refresh()
+      assert toggle.get_value() == "accelerator connected"
+    with self._accelerators(installed=True), mock.patch(f"{link}.read", return_value=None):
+      toggle.refresh()
+      assert toggle.get_value() == ""
 
   def test_shown_when_ready_with_the_hardware_out_of_the_car(self, params):
     # the engine is cached and the link may be on, so modeld will still try it at
