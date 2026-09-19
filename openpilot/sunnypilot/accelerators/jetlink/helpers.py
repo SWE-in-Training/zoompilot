@@ -413,7 +413,8 @@ def fetch_shipped_model(progress=None, should_stop=None) -> Path | None:
     return None
   dest = Path(Paths.model_root()) / model_file_name(model)
   return lfs.fetch_oid(model['oid'], model['size'], dest, repo_root(),
-                       progress=progress, should_stop=should_stop)
+                       progress=progress, should_stop=should_stop,
+                       hf_model=model.get('hf_model'))
 
 
 # -- readiness ------------------------------------------------------------

@@ -16,13 +16,21 @@
   ],
   "models": [
     {
+      "name": "Cinque V3",
+      "date": "2026-09-18",
+      "commit": "c6d13eb72",
+      "oid": "404a18cfd86d29637d20c697dfde245bb47c666ae016730ab674c65f4d1e1aa4",
+      "size": 766354845,
+      "hf_model": "f78ed37d-afad-4dbc-8050-40ea885eedde",
+      "default": true
+    },
+    {
       "name": "Cinque Terre",
       "date": "2026-09-04",
       "commit": "68b5f8e486",
       "oid": "e8d821733be15ebe9e27498bc27ad8bbbd741980ece37d77f377294010b8ff28",
       "size": 765950064,
-      "built_seconds": 102,
-      "default": true
+      "built_seconds": 102
     },
     {
       "name": "BMRLNAPv6",

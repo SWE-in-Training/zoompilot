@@ -177,7 +177,8 @@ def fetch(pointer: Path, dest: Path, repo_root: Path,
 
 def fetch_oid(oid: str, size: int, dest: Path, repo_root: Path,
               progress: Callable[[float], None] | None = None,
-              should_stop: Callable[[], bool] | None = None) -> Path:
+              should_stop: Callable[[], bool] | None = None,
+              hf_model: str | None = None) -> Path:
   """Materialise one lfs object by oid, from whichever server has it."""
   if dest.is_file() and dest.stat().st_size == size:
     return dest
@@ -188,5 +189,15 @@ def fetch_oid(oid: str, size: int, dest: Path, repo_root: Path,
       continue
     cloudlog.warning("jetlink: fetching the large model (%d MB) from %s", size >> 20, endpoint)
     return download(href, oid, size, dest, progress=progress, should_stop=should_stop)
+
+  if hf_model:
+    href = (
+      'https://huggingface.co/commaai/openpilot_driving_models/resolve/main/'
+      f'{hf_model}/12864/big_driving_supercombo.onnx'
+    )
+    cloudlog.warning("jetlink: fetching the large model (%d MB) from Hugging Face",
+                     size >> 20)
+    return download(href, oid, size, dest, progress=progress,
+                    should_stop=should_stop)
 
   raise LfsError(f"no configured LFS server has {oid[:16]}")
